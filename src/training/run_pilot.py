@@ -173,7 +173,8 @@ def build_pilot_splits(
         raise ValueError(f"Unknown noise regime: {noise_regime}")
 
     # Datasets and Loaders
-    train_transform, test_transform = get_cifar_transforms()
+    train_transform = get_cifar_transforms(train=True)
+    test_transform = get_cifar_transforms(train=False)
 
     train_ds = IndexedNoisyDataset(
         raw_data[train_idx], train_noisy_targets, train_clean_targets, transform=train_transform

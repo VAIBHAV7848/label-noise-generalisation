@@ -67,18 +67,21 @@ venv.bak/
 *.swp
 *.swo
 
-# Large datasets and raw model checkpoints (keep scripts and configs tracked)
+# Kaggle execution & data
 data/
 data/raw/
 kaggle_kernels/
 kaggle_runner/
+kaggle_debug*/
 kaggle.json
+mobile_app/build/
 *.tmp
 *.pt
 *.pth
 *.onnx
 *.pkl
 *.h5
+
 
 # OS generated
 .DS_Store
