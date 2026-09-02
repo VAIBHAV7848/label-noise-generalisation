@@ -1,6 +1,6 @@
 """Kaggle GPU Pilot Orchestrator for 84-Run Benchmark Grid.
 
-Manages 4 parallel Kaggle GPU kernels to execute the 84-run manifest,
+Manages a 2-GPU concurrency queue across Kaggle, pushes batches,
 monitors execution progress, downloads result archives, and validates results.
 """
 
@@ -14,9 +14,11 @@ import subprocess
 
 USERNAME = "vaibhavchavanpatil"
 NUM_BATCHES = 4
+MAX_CONCURRENT_GPU = 2
 BASE_DIR = os.path.abspath(".")
 KERNELS_DIR = os.path.join(BASE_DIR, "kaggle_kernels")
 OUTPUT_DIR = os.path.join(BASE_DIR, "05_RESULTS", "pilot")
+MANIFEST_PATH = os.path.join(BASE_DIR, "04_EXPERIMENTS", "pilot_run_manifest.json")
 
 
 def create_batch_kernel_files(batch_idx: int):
@@ -104,19 +106,16 @@ print(f"=== BATCH {{BATCH_INDEX}} FINISHED. ARCHIVE SAVED AT {{archive_path}} ==
     return batch_dir, kernel_id
 
 
-def push_all_kernels():
-    """Push all 4 batch kernels to Kaggle."""
-    kernel_ids = []
-    for b in range(NUM_BATCHES):
-        b_dir, k_id = create_batch_kernel_files(b)
-        print(f"Pushing Kernel for Batch {b} ({k_id})...")
-        res = subprocess.run(["python3", "-m", "kaggle", "kernels", "push", "-p", b_dir], capture_output=True, text=True)
-        if res.returncode != 0:
-            print(f"Error pushing batch {b}: {res.stderr}")
-        else:
-            print(f"  -> {res.stdout.strip()}")
-        kernel_ids.append(k_id)
-    return kernel_ids
+def push_kernel(batch_idx: int) -> bool:
+    """Push a specific batch kernel to Kaggle."""
+    b_dir, k_id = create_batch_kernel_files(batch_idx)
+    res = subprocess.run(["python3", "-m", "kaggle", "kernels", "push", "-p", b_dir], capture_output=True, text=True)
+    if res.returncode == 0:
+        print(f"Pushed Batch {batch_idx} ({k_id}): {res.stdout.strip()}")
+        return True
+    else:
+        print(f"Push failed for Batch {batch_idx}: {res.stderr.strip() or res.stdout.strip()}")
+        return False
 
 
 def get_kernel_status(kernel_id: str) -> str:
@@ -135,7 +134,7 @@ def get_kernel_status(kernel_id: str) -> str:
     return "UNKNOWN"
 
 
-def download_and_extract_results(kernel_id: str, batch_idx: int):
+def download_and_extract_results(kernel_id: str, batch_idx: int) -> bool:
     """Download output archive and extract JSON results and checkpoints."""
     download_dir = os.path.join(KERNELS_DIR, f"output_batch_{batch_idx}")
     os.makedirs(download_dir, exist_ok=True)
@@ -146,7 +145,6 @@ def download_and_extract_results(kernel_id: str, batch_idx: int):
     print(f"Downloading outputs for {kernel_id}...")
     subprocess.run(["python3", "-m", "kaggle", "kernels", "output", kernel_id, "-p", download_dir], check=True)
 
-    # Search for tarball
     archive_path = os.path.join(download_dir, f"pilot_results_batch_{batch_idx}.tar.gz")
     if os.path.exists(archive_path):
         print(f"Extracting {archive_path} into {OUTPUT_DIR}...")
@@ -157,14 +155,12 @@ def download_and_extract_results(kernel_id: str, batch_idx: int):
                     if not rel_path:
                         continue
                     if member.name.endswith(".json"):
-                        # Extract JSON directly into 05_RESULTS/pilot/
                         f = tar.extractfile(member)
                         if f:
                             target_file = os.path.join(OUTPUT_DIR, os.path.basename(member.name))
                             with open(target_file, "wb") as out_f:
                                 out_f.write(f.read())
                     elif member.name.endswith(".pt"):
-                        # Extract checkpoint into 05_RESULTS/pilot/checkpoints/
                         f = tar.extractfile(member)
                         if f:
                             target_file = os.path.join(checkpoints_dir, os.path.basename(member.name))
@@ -177,41 +173,107 @@ def download_and_extract_results(kernel_id: str, batch_idx: int):
         return False
 
 
+def count_completed_manifest_runs() -> tuple[int, int]:
+    """Count valid completed runs in 05_RESULTS/pilot/ against the 84 manifest."""
+    if not os.path.exists(MANIFEST_PATH):
+        return 0, 84
+    with open(MANIFEST_PATH, "r") as f:
+        manifest = json.load(f)
+    runs = manifest["runs"]
+    completed = 0
+    for r in runs:
+        res_file = os.path.join(OUTPUT_DIR, f"{r['experiment_id']}.json")
+        if os.path.exists(res_file):
+            try:
+                with open(res_file, "r") as rf:
+                    data = json.load(rf)
+                if data.get("status") == "COMPLETED" and "metrics" in data:
+                    completed += 1
+            except Exception:
+                pass
+    return completed, len(runs)
+
+
 def main():
     print("=" * 70)
-    print("KAGGLE GPU PILOT ORCHESTRATOR — 84-RUN BENCHMARK")
+    print("KAGGLE GPU PILOT QUEUE ORCHESTRATOR — 84-RUN BENCHMARK")
     print("=" * 70)
 
-    kernel_ids = push_all_kernels()
-    print("\nAll 4 batch kernels pushed. Entering monitoring loop...")
+    # Initialize batch metadata
+    for b in range(NUM_BATCHES):
+        create_batch_kernel_files(b)
 
-    completed = set()
+    # State tracking: PENDING, RUNNING, COMPLETED, ERROR
+    batch_status = {b: "PENDING" for b in range(NUM_BATCHES)}
+    kernel_ids = {b: f"{USERNAME}/label-noise-pilot-batch-{b}" for b in range(NUM_BATCHES)}
+
+    # Check initially running kernels on Kaggle
+    for b in range(NUM_BATCHES):
+        k_status = get_kernel_status(kernel_ids[b])
+        if k_status == "RUNNING":
+            batch_status[b] = "RUNNING"
+            print(f"Batch {b} is already RUNNING on Kaggle.")
+        elif k_status == "COMPLETE":
+            # Attempt to download if not already synchronized
+            download_and_extract_results(kernel_ids[b], b)
+            batch_status[b] = "COMPLETED"
+
     start_time = time.time()
 
-    while len(completed) < NUM_BATCHES:
-        time.sleep(30)
-        elapsed = time.time() - start_time
-        print(f"\n--- Monitoring Update [T + {elapsed/60:.1f} min] ---")
+    while True:
+        completed_count = sum(1 for s in batch_status.values() if s == "COMPLETED")
+        if completed_count == NUM_BATCHES:
+            break
 
-        for b, k_id in enumerate(kernel_ids):
-            if b in completed:
-                print(f"Batch {b} ({k_id}): COMPLETED & SYNCHRONIZED")
-                continue
+        # Check running kernels
+        active_running = sum(1 for s in batch_status.values() if s == "RUNNING")
 
-            status = get_kernel_status(k_id)
-            print(f"Batch {b} ({k_id}): {status}")
-
-            if status == "COMPLETE":
-                print(f"Batch {b} finished execution on Kaggle! Downloading results...")
-                success = download_and_extract_results(k_id, b)
+        # Launch pending kernels if below capacity
+        for b in range(NUM_BATCHES):
+            if batch_status[b] == "PENDING" and active_running < MAX_CONCURRENT_GPU:
+                print(f"Queue slot available. Launching Batch {b}...")
+                success = push_kernel(b)
                 if success:
-                    completed.add(b)
-            elif status == "ERROR":
-                print(f"WARNING: Batch {b} encountered an error. Re-pushing to retry...")
-                subprocess.run(["python3", "-m", "kaggle", "kernels", "push", "-p", os.path.join(KERNELS_DIR, f"batch_{b}")])
+                    batch_status[b] = "RUNNING"
+                    active_running += 1
+                    time.sleep(5)
+
+        # Poll running kernels
+        for b in range(NUM_BATCHES):
+            if batch_status[b] == "RUNNING":
+                st = get_kernel_status(kernel_ids[b])
+                if st == "COMPLETE":
+                    print(f"\n[EVENT] Batch {b} completed execution on Kaggle! Downloading results...")
+                    success = download_and_extract_results(kernel_ids[b], b)
+                    if success:
+                        batch_status[b] = "COMPLETED"
+                    else:
+                        print(f"Failed to synchronize results for Batch {b}. Retrying...")
+                elif st == "ERROR":
+                    print(f"\n[EVENT] Batch {b} encountered an infrastructure error. Re-queueing...")
+                    batch_status[b] = "PENDING"
+
+        # Monitoring Progress Report
+        done_runs, total_runs = count_completed_manifest_runs()
+        elapsed_sec = time.time() - start_time
+        elapsed_min = elapsed_sec / 60.0
+
+        if done_runs > 0:
+            rate = done_runs / elapsed_sec
+            rem_sec = (total_runs - done_runs) / rate
+            rem_min = rem_sec / 60.0
+            eta_str = f"{rem_min:.1f} min"
+        else:
+            eta_str = "calculating..."
+
+        print(f"\n--- Progress: [{done_runs}/{total_runs} Runs Completed ({done_runs/total_runs*100:.1f}%)] | Active Batches: {[b for b, s in batch_status.items() if s == 'RUNNING']} | Elapsed: {elapsed_min:.1f}m | ETA: {eta_str} ---")
+        for b in range(NUM_BATCHES):
+            print(f"  Batch {b}: {batch_status[b]} ({kernel_ids[b]})")
+
+        time.sleep(30)
 
     print("\n" + "=" * 70)
-    print("ALL 4 BATCHES COMPLETED. RUNNING FINAL MANIFEST VALIDATION...")
+    print("ALL 4 BATCHES COMPLETED. EXECUTING FINAL MANIFEST VALIDATION...")
     print("=" * 70)
 
     subprocess.run([
