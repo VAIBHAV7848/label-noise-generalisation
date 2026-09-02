@@ -9,6 +9,8 @@ Let $T \in [0, 1]^{K \times K}$ be an invertible class-conditional noise transit
 $$\mathbb{E}_{(X, \tilde{Y}) \sim \tilde{\mathcal{D}}} [\tilde{\ell}(f(X), \tilde{Y})] = \mathbb{E}_{(X, Y) \sim \mathcal{D}} [\ell(f(X), Y)]$$
 *(Proof provided in `proofs/forward_backward_unbiasedness.md`)*
 
+> **Remark on Negative Per-Sample Loss Values**: Because the inverse transition matrix $T^{-1}$ possesses negative off-diagonal entries for any non-identity matrix $T \ne I$, individual per-example backward loss values $\hat{\ell}_{\text{backward}}(f(x_i), \tilde{y}_i) = [T^{-1} \vec{\ell}(f(x_i))]_{\tilde{y}_i}$ can legitimately be negative on specific sample instances. The expectation over the noisy conditional distribution $\mathbb{E}_{\tilde{Y} \mid x}[\hat{\ell}_{\text{backward}}] = \mathbf{p}(x)^\top \vec{\ell}(f(x)) \ge 0$ is strictly non-negative for non-negative base losses. In contrast, the empirical pilot pipeline utilizes Forward Loss Correction $\hat{\ell}_{\text{forward}}(f(x), \tilde{y}) = -\log([T^\top f(x)]_{\tilde{y}}) \ge 0$, which is strictly non-negative per sample.
+
 ---
 
 ## Proposition 2A (Pointwise Expected Risk Bias under Matrix Perturbation)
@@ -24,7 +26,13 @@ Assume the base surrogate loss $\ell$ is $M$-bounded ($0 \le \ell \le M$) and $L
 
 Then with probability at least $1 - \delta$ over the random draw of $S_R$:
 $$\mathcal{E}(\hat{f}) = R_{\mathcal{D}}(\hat{f}) - \min_{f \in \mathcal{F}} R_{\mathcal{D}}(f) \le \frac{2 \sqrt{K} M \|T^{-1}\|_2^2 \epsilon}{1 - \|T^{-1}\|_2 \epsilon} + 4 \sqrt{2} L_{\ell} \|\hat{T}^{-1}\|_2 \mathcal{R}_{n_R}(\mathcal{F}) + 2 \sqrt{K} M \|\hat{T}^{-1}\|_2 \sqrt{\frac{\ln(2/\delta)}{2n_R}}$$
-*(Complete symbolic derivation and assumptions documented in `07_REVIEW/proposition2_proof_audit.md`)*
+
+---
+
+### Remark on Loss Boundedness & Cross-Entropy Applicability
+1. **Bounded Surrogate Losses**: Proposition 2 applies directly to naturally bounded surrogate losses, such as Generalized Cross Entropy (GCE, where $M = 1/q$ and $L_\ell = 1$), 0-1 surrogate losses, and Symmetric Cross Entropy.
+2. **Standard Cross-Entropy Applicability**: Standard multiclass Cross-Entropy $\ell(\mathbf{p}, y) = -\log p_y$ is unbounded on the open simplex as $p_y \to 0$. Proposition 2B applies to Cross-Entropy under the standard **probability-clamping condition** $p_k(x) \ge \epsilon_{\text{clamp}} > 0$ (enforced in deep learning implementations, yielding $M = -\log \epsilon_{\text{clamp}}$ and $L_\ell = 1/\epsilon_{\text{clamp}}$) or under bounded logit domains $\|f(x)\|_\infty \le B$.
+3. **Unbounded CE Formulation**: Unclipped theoretical Cross-Entropy on the open simplex violates McDiarmid's uniform bounded difference condition and requires sub-exponential / Bernstein concentration bounds.
 
 ---
 

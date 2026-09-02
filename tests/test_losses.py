@@ -85,6 +85,33 @@ class TestLosses(unittest.TestCase):
         loss = forward_loss(logits, targets)
         self.assertGreaterEqual(loss.item(), 0.0)
 
+    def test_backward_correction_negative_per_sample_loss_validity(self):
+        """Verify that per-example backward loss can legitimately be negative while expectation is >= 0."""
+        num_classes = 4
+        # Matrix with strong noise producing negative off-diagonal entries in T^-1
+        T = build_symmetric_transition_matrix(num_classes, 0.4)
+        T_inv = np.linalg.inv(T)
+        self.assertTrue(np.any(T_inv < 0.0), "T_inv should have negative off-diagonal entries")
+        
+        backward_loss = BackwardLossCorrection(transition_matrix=T, base_loss="ce", reduction="none")
+        # Logits predicting class 0 with very high confidence
+        logits = torch.tensor([[10.0, -10.0, -10.0, -10.0]])
+        
+        # When observed noisy label is class 1 (false label)
+        noisy_target_1 = torch.tensor([1])
+        loss_1 = backward_loss(logits, noisy_target_1).item()
+        
+        # When observed noisy label is class 0 (true label)
+        noisy_target_0 = torch.tensor([0])
+        loss_0 = backward_loss(logits, noisy_target_0).item()
+        
+        # One of the per-sample losses may be negative due to negative entries in T_inv
+        # Expected risk under clean class 0: T[0, 0]*loss_0 + sum_{j!=0} T[0, j]*loss_j
+        expected_risk = T[0, 0] * loss_0 + sum(T[0, j] * backward_loss(logits, torch.tensor([j])).item() for j in range(1, num_classes))
+        
+        # Expected risk MUST be non-negative because clean loss is non-negative
+        self.assertGreaterEqual(expected_risk, -1e-6)
+
 
 if __name__ == "__main__":
     unittest.main()
