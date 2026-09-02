@@ -27,12 +27,16 @@ from ..losses.robust_losses import GeneralizedCrossEntropyLoss, SymmetricCrossEn
 from ..losses.loss_correction import ForwardLossCorrection
 from ..estimators.anchor_point import estimate_transition_matrix_anchor_points
 from ..estimators.confident_learning import estimate_transition_matrix_confident_learning
+from ..estimators.oof import compute_oof_predicted_probabilities
 from ..models.resnet import PreActResNet18
 from ..models.mlp import TwoLayerMLP
 from ..data.transforms import get_cifar_transforms
 from ..metrics.classification import compute_topk_accuracy
 from ..metrics.calibration import compute_ece, compute_adaptive_ece, compute_brier_score
 from ..training.temperature_scaling import ModelWithTemperature
+
+
+from PIL import Image
 
 
 class IndexedNoisyDataset(Dataset):
@@ -50,6 +54,8 @@ class IndexedNoisyDataset(Dataset):
     def __getitem__(self, idx: int):
         img = self.data[idx]
         if self.transform is not None:
+            if isinstance(img, np.ndarray):
+                img = Image.fromarray(img)
             img = self.transform(img)
         return img, int(self.noisy_labels[idx]), int(self.clean_labels[idx]), idx
 
@@ -246,23 +252,22 @@ def run_single_experiment(
             frobenius_error = float(np.linalg.norm(T_hat - true_T, ord="fro"))
             criterion = ForwardLossCorrection(transition_matrix=T_hat)
         elif track_name == "ForwardCorrection_ConfidentLearningT":
-            # Estimate T via confident learning
-            warmup_model = PreActResNet18(num_classes=10).to(device) if model_name == "PreActResNet18" else TwoLayerMLP(3072, 512, 10).to(device)
-            warmup_opt = torch.optim.SGD(warmup_model.parameters(), lr=0.05, momentum=0.9, weight_decay=5e-4)
-            warmup_model.train()
-            for _ in range(5):
-                for imgs, targets, _, _ in train_loader:
-                    imgs, targets = imgs.to(device), targets.to(device)
-                    warmup_opt.zero_grad()
-                    F.cross_entropy(warmup_model(imgs), targets).backward()
-                    warmup_opt.step()
-            warmup_model.eval()
-            all_train_probs = []
-            with torch.no_grad():
-                for imgs, _, _, _ in DataLoader(train_loader.dataset, batch_size=256, shuffle=False):
-                    all_train_probs.append(F.softmax(warmup_model(imgs.to(device)), dim=-1).cpu())
-            all_train_probs = torch.cat(all_train_probs, dim=0).numpy()
-            T_hat, _ = estimate_transition_matrix_confident_learning(all_train_probs, train_noisy_labels, 10)
+            # Estimate T via Confident Learning using true out-of-fold (OOF) cross-validation (Northcutt et al., 2021)
+            model_factory = (lambda: PreActResNet18(num_classes=10)) if model_name == "PreActResNet18" else (lambda: TwoLayerMLP(3072, 512, 10))
+            raw_train_data = train_loader.dataset.data
+            oof_train_probs = compute_oof_predicted_probabilities(
+                data=raw_train_data,
+                noisy_labels=train_noisy_labels,
+                num_classes=10,
+                model_fn=model_factory,
+                n_splits=3,
+                epochs=5,
+                batch_size=batch_size,
+                lr=0.05,
+                seed=seed,
+                device=device,
+            )
+            T_hat, _ = estimate_transition_matrix_confident_learning(oof_train_probs, train_noisy_labels, 10)
             frobenius_error = float(np.linalg.norm(T_hat - true_T, ord="fro"))
             criterion = ForwardLossCorrection(transition_matrix=T_hat)
         elif track_name == "ForwardCorrection_BadT":
