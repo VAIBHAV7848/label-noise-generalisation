@@ -52,22 +52,26 @@ def estimate_transition_matrix_confident_learning(
     if isinstance(noisy_labels, torch.Tensor):
         noisy_labels = noisy_labels.detach().cpu().numpy()
 
+    num_samples = len(noisy_labels)
     thresholds = compute_class_thresholds(probs, noisy_labels, num_classes)
     
     # Construct unnormalized confusion counting matrix C_jk
-    # C_jk = count(x in noisy class j with p_k(x) >= t_k)
+    # Each sample x is assigned to class k with highest margin p_k - t_k among classes exceeding threshold
     C = np.zeros((num_classes, num_classes), dtype=np.float64)
 
-    for j in range(num_classes):
-        j_idx = np.where(noisy_labels == j)[0]
-        if len(j_idx) == 0:
-            continue
-        probs_j = probs[j_idx, :]
+    for idx in range(num_samples):
+        j = noisy_labels[idx]
+        p_vec = probs[idx]
         
-        # For each sample, identify which classes pass the threshold
-        for k in range(num_classes):
-            matches = probs_j[:, k] >= thresholds[k]
-            C[j, k] = np.sum(matches)
+        # Check candidate classes exceeding threshold
+        valid_candidates = np.where(p_vec >= thresholds)[0]
+        if len(valid_candidates) > 0:
+            # Pick class maximizing margin p_k - t_k
+            best_k = valid_candidates[np.argmax(p_vec[valid_candidates] - thresholds[valid_candidates])]
+        else:
+            best_k = np.argmax(p_vec)
+            
+        C[j, best_k] += 1.0
 
     # Normalize C to obtain joint distribution Q(Y_tilde = j, Y* = k)
     total_count = np.sum(C)
@@ -80,7 +84,6 @@ def estimate_transition_matrix_confident_learning(
     true_class_marginals = joint_Q.sum(axis=0, keepdims=True)  # (1, K)
     true_class_marginals = np.where(true_class_marginals == 0, 1.0, true_class_marginals)
     
-    # P(Y_tilde = j | Y* = k) = Q(j, k) / P(Y* = k)
     # Transpose so T_kj is row k (true), column j (noisy)
     T_hat = (joint_Q / true_class_marginals).T
 

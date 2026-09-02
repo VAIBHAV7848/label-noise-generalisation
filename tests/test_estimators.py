@@ -36,11 +36,40 @@ class TestEstimators(unittest.TestCase):
             noisy_labels=all_noisy_labels,
             num_classes=num_classes,
             percentile=95.0,
+            global_search=True,
         )
         
         self.assertTrue(validate_transition_matrix(T_hat))
         frobenius_error = np.linalg.norm(T_hat - T_true, ord="fro")
         self.assertLess(frobenius_error, 0.15)
+
+    def test_anchor_point_global_search_under_corrupted_anchors(self):
+        """Adversarial test: True anchor points for class 0 received noisy label 1.
+        Global search must successfully recover row 0 from p_0(x) regardless of noisy_labels."""
+        num_classes = 2
+        T_true = np.array([[0.8, 0.2], [0.3, 0.7]])
+        
+        # 100 samples of class 0 anchor points, but corrupted to label 1
+        anchor_probs = np.tile(np.array([0.8, 0.2]), (100, 1))
+        anchor_noisy_labels = np.ones(100, dtype=np.int64)  # Corrupted to class 1
+        
+        # 100 samples of class 1 anchor points, with label 1
+        class1_probs = np.tile(np.array([0.3, 0.7]), (100, 1))
+        class1_noisy_labels = np.ones(100, dtype=np.int64)
+        
+        all_probs = np.vstack([anchor_probs, class1_probs])
+        all_noisy_labels = np.concatenate([anchor_noisy_labels, class1_noisy_labels])
+        
+        T_hat = estimate_transition_matrix_anchor_points(
+            probs=all_probs,
+            noisy_labels=all_noisy_labels,
+            num_classes=num_classes,
+            percentile=90.0,
+            global_search=True,
+        )
+        
+        self.assertTrue(validate_transition_matrix(T_hat))
+        self.assertTrue(np.allclose(T_hat[0], [0.8, 0.2], atol=1e-3))
 
     def test_confident_learning_estimator(self):
         num_classes = 3
