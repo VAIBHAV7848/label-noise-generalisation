@@ -40,3 +40,21 @@ Every major research decision, its motivation, evidence basis, rejected alternat
 - **Reason**: Ensures statistical reproducibility and eliminates lucky-seed anomalies.
 - **Alternatives Considered**: 3 seeds or single-seed runs.
 - **Why Rejected**: 3 seeds lack sufficient statistical power for Wilcoxon rank tests; single runs violate empirical integrity.
+
+---
+
+### Record DEC-005: Modular Decoupling of Transition Matrix Estimators from Loss Minimization
+- **Date**: 2026-09-02
+- **Decision**: Implemented `src/estimators/` (Anchor Point, Dual-T, Confident Learning) as standalone decoupled estimator routines independent of loss correction modules.
+- **Reason**: Allows isolated Frobenius and Spectral norm error benchmarking ($\|\hat{T} - T\|_F$) to validate Proposition 2 without confounding estimation with neural network optimization artifacts.
+- **Alternatives Considered**: End-to-end joint estimation layers.
+- **Why Rejected**: Obscures whether performance drops arise from poor matrix estimation or loss function non-convexity.
+
+---
+
+### Record DEC-006: Inclusion of Post-Hoc Noise-Aware Temperature Scaling
+- **Date**: 2026-09-02
+- **Decision**: Implemented `ModelWithTemperature` in `src/training/temperature_scaling.py` allowing L-BFGS calibration on validation splits.
+- **Reason**: Directly addresses Hypothesis H3 by providing an empirical mechanism to test whether noise-induced Expected Calibration Error (ECE) inflation can be repaired post-hoc.
+- **Alternatives Considered**: Uncalibrated raw softmax evaluation only.
+- **Why Rejected**: Ignores calibration reliability, a primary pillar of this research.
