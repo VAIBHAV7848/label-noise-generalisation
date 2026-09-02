@@ -86,7 +86,7 @@ cmd = [
     "--device", "cuda"
 ]
 print("Executing command:", " ".join(cmd))
-res = subprocess.run(cmd)
+subprocess.run(cmd, check=True)
 
 # 5. Archive results to root output directory
 archive_path = f"/kaggle/working/pilot_results_batch_{{BATCH_INDEX}}.tar.gz"
