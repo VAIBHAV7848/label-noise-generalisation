@@ -64,8 +64,8 @@ $$\left| \mathbb{E}_{\tilde{\mathcal{D}}} [\hat{\ell}_{\text{backward}}(f(X), \t
 - Let $\hat{f} = \arg\min_{f \in \mathcal{F}} \hat{R}_{S_R, \hat{T}}(f)$ and $f^* = \arg\min_{f \in \mathcal{F}} R_{\mathcal{D}}(f)$.
 
 ### Excess Risk Decomposition
-$$R_{\mathcal{D}}(\hat{f}) - R_{\mathcal{D}}(f^*) = \underbrace{\left( R_{\mathcal{D}}(\hat{f}) - R_{\tilde{\mathcal{D}}, \hat{T}}(\hat{f}) \right)}_{\le \Delta_{\text{bias}}} + \underbrace{\left( R_{\tilde{\mathcal{D}}, \hat{T}}(\hat{f}) - \hat{R}_{S_R, \hat{T}}(\hat{f}) \right)}_{\le \text{Uniform Gen Gap}} + \underbrace{\left( \hat{R}_{S_R, \hat{T}}(\hat{f}) - \hat{R}_{S_R, \hat{T}}(f^*) \right)}_{\le 0} + \underbrace{\left( \hat{R}_{S_R, \hat{T}}(f^*) - R_{\tilde{\mathcal{D}}, \hat{T}}(f^*) \right)}_{\le \text{Uniform Gen Gap}} + \underbrace{\left( R_{\tilde{\mathcal{D}}, \hat{T}}(f^*) - R_{\mathcal{D}}(f^*) \right)}_{\le \Delta_{\text{bias}}}$$
-1. By Proposition 2A, the sum of the bias terms is bounded by:
+$$R_{\mathcal{D}}(\hat{f}) - R_{\mathcal{D}}(f^*) \le 2 \Delta_{\text{bias}} + 2 \sup_{f \in \mathcal{F}} | R_{\tilde{\mathcal{D}}, \hat{T}}(f) - \hat{R}_{S_R, \hat{T}}(f) |$$
+1. By Proposition 2A, the bias term is bounded by:
    $$2 \Delta_{\text{bias}} = \frac{2 \sqrt{K} M \|T^{-1}\|_2^2 \epsilon}{1 - \|T^{-1}\|_2 \epsilon}$$
 2. Conditioned on fixed $\hat{T}$, the loss class $\mathcal{G}_{\hat{T}} = \{ (x, \tilde{y}) \mapsto [\hat{T}^{-1} \vec{\ell}(f(x))]_{\tilde{y}} : f \in \mathcal{F} \}$ is fixed with respect to $S_R$.
 3. Applying vector-contraction Rademacher inequality (Maurer, 2016) for Lipschitz loss with operator norm $\|\hat{T}^{-1}\|_2$:
@@ -77,13 +77,18 @@ $$R_{\mathcal{D}}(\hat{f}) - R_{\mathcal{D}}(f^*) = \underbrace{\left( R_{\mathc
 
 ---
 
-## 4. Case B: Data-Dependent $\hat{T}(S)$ (Same-Sample Analysis)
+## 4. Comprehensive Loss Boundedness & Lipschitz Analysis
 
-When $\hat{T} = \hat{T}(S)$ is computed on the entire training set $S$ without sample splitting:
-- The loss function $\hat{\ell}_{\text{backward}}(f(x_i), \tilde{y}_i) = [\hat{T}(S)^{-1} \vec{\ell}(f(x_i))]_{\tilde{y}_i}$ depends on all points $x_1, \dots, x_n$.
-- **Covering Net Bounding**: To bound $\sup_{f \in \mathcal{F}} | R_{\tilde{\mathcal{D}}, \hat{T}(S)}(f) - \hat{R}_{S, \hat{T}(S)}(f) |$, one must consider the uniform empirical process over the compact matrix set $\mathcal{T}_\epsilon = \{ A \in \mathbb{R}^{K \times K} : \|A - T\|_F \le \epsilon \}$:
-  $$\sup_{f \in \mathcal{F}, A \in \mathcal{T}_\epsilon} | R_{\tilde{\mathcal{D}}, A}(f) - \hat{R}_{S, A}(f) | \le 2 \sqrt{2} L_\ell \left( \sup_{A \in \mathcal{T}_\epsilon} \|A^{-1}\|_2 \right) \mathcal{R}_n(\mathcal{F}) + O\left( \frac{K M \sqrt{K^2 \ln(n/\delta)}}{n} \right)$$
-- **Conclusion**: Proposition 2B is formally and cleanly stated under the standard Sample-Splitting framework.
+The table below audits all project-relevant loss functions against Proposition 2B's requirements ($0 \le \ell \le M$ and $L_\ell$-Lipschitz on $\Delta^{K-1}$):
+
+| Loss Function | Globally Bounded on $\Delta^{K-1}$? | Globally Lipschitz on $\Delta^{K-1}$? | Prop 2B Directly Applicable? | Rigorous Mathematical Condition |
+| :--- | :---: | :---: | :---: | :--- |
+| **Mean Absolute Error (MAE / $L_1$)** | **YES** ($M = 2$) | **YES** ($L_\ell = 2$) | **YES (Unconditional)** | Unconditionally satisfies all Proposition 2B requirements globally. |
+| **Forward Loss Correction ($\ell_{\text{forward}}$)** | **YES** ($M = -\log T_{\min}$) | **YES** ($L_\ell = 1/T_{\min}$) | **YES (Under $T_{\min} > 0$)** | Holds whenever minimum transition entry $T_{\min} = \min_{i, j} T_{ij} > 0$. |
+| **Generalized Cross Entropy (GCE, $q=0.7$)** | **YES** ($M = 1/q \approx 1.43$) | **NO** ($\lim_{p \to 0} L_q' = -\infty$) | **CONDITIONAL** | $L_q(p) = \frac{1-p^q}{q}$ has derivative $-p^{q-1} \to -\infty$ as $p \to 0$. Requires probability floor $p_y \ge \epsilon > 0$ for Lipschitz condition ($L_\ell = \epsilon^{q-1} = \epsilon^{-0.3}$). |
+| **Categorical Cross-Entropy (CE)** | **NO** ($\lim_{p \to 0} -\log p = +\infty$) | **NO** ($\lim_{p \to 0} -1/p = -\infty$) | **CONDITIONAL** | Unbounded on open simplex. Requires probability floor $p_y \ge \epsilon > 0$ ($M = -\log \epsilon, L_\ell = 1/\epsilon$) or bounded logit domain $\|z\|_\infty \le B$. |
+| **Symmetric Cross Entropy (SCE)** | **NO** (due to CE term) | **NO** (due to CE term) | **CONDITIONAL** | RCE term is bounded; CE term requires probability floor $p_y \ge \epsilon > 0$. |
+| **Backward Loss Correction ($\ell_{\text{backward}}$)** | **Depends on base loss** | **Depends on base loss** | **CONDITIONAL** | Requires bounded and Lipschitz base surrogate loss (e.g., MAE or clamped CE). |
 
 ---
 
@@ -93,13 +98,13 @@ When $\hat{T} = \hat{T}(S)$ is computed on the entire training set $S$ without s
 | :--- | :--- | :--- | :--- |
 | **Track 4 (Known True $T$)** | Exact true $T$ ($\epsilon = 0$) | Known true synthetic $T$ ($\epsilon = 0$) | **Exact correspondence** |
 | **Track 5 (Anchor $\hat{T}$)** | Independent sample $S_T$ | 5-epoch warm-up model on $\tilde{S}$ | Empirical diagnostic approximation |
-| **Track 6 (Confident Learning $\hat{T}$)** | Independent sample $S_T$ | 3-Fold Out-of-Fold cross-validation | Out-of-fold partitions emulate sample splitting for probability estimation |
+| **Track 6 (Confident Learning $\hat{T}$)** | Independent sample $S_T$ | **3-Fold Out-of-Fold Cross-Validation** | OOF partitions emulate sample splitting for probability estimation |
 | **Track 7 (Bad $\hat{T}_{\text{bad}}$)** | Fixed perturbed matrix ($\epsilon \approx 0.40$) | Deliberate perturbation $0.5 T + 0.5 \mathbf{U}$ | **Exact correspondence** |
 
 ---
 
 ## 6. Numerical Simulation Sanity Checks
 
-Across 10,000 randomized transition matrices with bounded losses ($M=2.0, K=10$), the bound:
+Across 1,000 randomized transition matrices with bounded losses ($M=2.5, K=10$), the bound:
 $$|\text{Bias}| \le \frac{\sqrt{K} M \|T^{-1}\|_2^2 \epsilon}{1 - \|T^{-1}\|_2 \epsilon}$$
-exhibits **0 violations** ($100\%$ mathematical compliance).
+exhibits **0 violations** ($100\%$ mathematical compliance). Verified in [`tests/test_proposition2_bound.py`](file:///home/nethunter/Desktop/Research_Paper/tests/test_proposition2_bound.py).

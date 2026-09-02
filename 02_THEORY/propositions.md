@@ -29,10 +29,18 @@ $$\mathcal{E}(\hat{f}) = R_{\mathcal{D}}(\hat{f}) - \min_{f \in \mathcal{F}} R_{
 
 ---
 
-### Remark on Loss Boundedness & Cross-Entropy Applicability
-1. **Bounded Surrogate Losses**: Proposition 2 applies directly to naturally bounded surrogate losses, such as Generalized Cross Entropy (GCE, where $M = 1/q$ and $L_\ell = 1$), 0-1 surrogate losses, and Symmetric Cross Entropy.
-2. **Standard Cross-Entropy Applicability**: Standard multiclass Cross-Entropy $\ell(\mathbf{p}, y) = -\log p_y$ is unbounded on the open simplex as $p_y \to 0$. Proposition 2B applies to Cross-Entropy under the standard **probability-clamping condition** $p_k(x) \ge \epsilon_{\text{clamp}} > 0$ (enforced in deep learning implementations, yielding $M = -\log \epsilon_{\text{clamp}}$ and $L_\ell = 1/\epsilon_{\text{clamp}}$) or under bounded logit domains $\|f(x)\|_\infty \le B$.
-3. **Unbounded CE Formulation**: Unclipped theoretical Cross-Entropy on the open simplex violates McDiarmid's uniform bounded difference condition and requires sub-exponential / Bernstein concentration bounds.
+### Loss Taxonomy & Applicability Matrix for Proposition 2B
+
+The uniform concentration in Proposition 2B strictly requires $0 \le \ell \le M$ and $L_\ell$-Lipschitz continuity on the prediction domain. The table below audits all project-relevant loss functions:
+
+| Loss Function | Bounded on $\Delta^{K-1}$? | Globally Lipschitz on $\Delta^{K-1}$? | Prop 2B Directly Applicable? | Rigorous Mathematical Condition |
+| :--- | :---: | :---: | :---: | :--- |
+| **Mean Absolute Error (MAE / $L_1$)** | **YES** ($M = 2$) | **YES** ($L_\ell = 2$) | **YES (Unconditional)** | Unconditionally satisfies all Proposition 2B requirements globally. |
+| **Forward Loss Correction ($\ell_{\text{forward}}$)** | **YES** ($M = -\log T_{\min}$) | **YES** ($L_\ell = 1/T_{\min}$) | **YES (Under $T_{\min} > 0$)** | Holds whenever minimum transition entry $T_{\min} = \min_{i, j} T_{ij} > 0$. |
+| **Generalized Cross Entropy (GCE, $q=0.7$)** | **YES** ($M = 1/q \approx 1.43$) | **NO** ($\lim_{p \to 0} L_q' = -\infty$) | **CONDITIONAL** | $L_q(p) = \frac{1-p^q}{q}$ has derivative $-p^{q-1} \to -\infty$ as $p \to 0$. Requires probability floor $p_y \ge \epsilon > 0$ for Lipschitz condition ($L_\ell = \epsilon^{q-1} = \epsilon^{-0.3}$). |
+| **Categorical Cross-Entropy (CE)** | **NO** ($\lim_{p \to 0} -\log p = +\infty$) | **NO** ($\lim_{p \to 0} -1/p = -\infty$) | **CONDITIONAL** | Unbounded on open simplex. Requires probability floor $p_y \ge \epsilon > 0$ ($M = -\log \epsilon, L_\ell = 1/\epsilon$) or bounded logit domain $\|z\|_\infty \le B$. |
+| **Symmetric Cross Entropy (SCE)** | **NO** (due to CE term) | **NO** (due to CE term) | **CONDITIONAL** | RCE term is bounded; CE term requires probability floor $p_y \ge \epsilon > 0$. |
+| **Backward Loss Correction ($\ell_{\text{backward}}$)** | **Depends on base loss** | **Depends on base loss** | **CONDITIONAL** | Requires bounded and Lipschitz base surrogate loss (e.g., MAE or clamped CE). |
 
 ---
 
