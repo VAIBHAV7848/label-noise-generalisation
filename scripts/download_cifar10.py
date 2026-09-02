@@ -1,88 +1,64 @@
-"""Parallel multi-connection downloader for CIFAR-10 python tarball with streaming and progress."""
+"""Robust multi-source downloader and preparer for CIFAR-10."""
 
 import os
 import sys
 import tarfile
 import urllib.request
-import concurrent.futures
+import torchvision.datasets as datasets
 import time
 
-URL = "https://cave.cs.toronto.edu/kriz/cifar-10-python.tar.gz"
-TOTAL_SIZE = 170498071  # exact byte size
 DATA_DIR = os.path.abspath("data")
-TAR_PATH = os.path.join(DATA_DIR, "cifar-10-python.tar.gz")
-NUM_CHUNKS = 16  # 16 chunks of ~10.6 MB each
 
 
-def download_chunk(chunk_id, start_byte, end_byte):
-    chunk_file = os.path.join(DATA_DIR, f"cifar_part_{chunk_id:02d}.tmp")
-    expected_len = end_byte - start_byte + 1
-    if os.path.exists(chunk_file) and os.path.getsize(chunk_file) == expected_len:
-        print(f"Chunk {chunk_id:02d} already downloaded.")
-        return chunk_id, True
-
-    req = urllib.request.Request(URL, headers={"Range": f"bytes={start_byte}-{end_byte}", "User-Agent": "Mozilla/5.0"})
-    for attempt in range(5):
-        try:
-            with urllib.request.urlopen(req, timeout=300) as response:
-                with open(chunk_file, "wb") as f:
-                    downloaded = 0
-                    while True:
-                        buf = response.read(65536)
-                        if not buf:
-                            break
-                        f.write(buf)
-                        downloaded += len(buf)
-                if downloaded == expected_len:
-                    print(f"Chunk {chunk_id:02d} complete ({downloaded/1024/1024:.2f} MB).")
-                    return chunk_id, True
-        except Exception as e:
-            print(f"Chunk {chunk_id:02d} attempt {attempt+1} failed: {e}")
-            time.sleep(2.0)
-    return chunk_id, False
-
-
-def main():
+def ensure_cifar10_ready():
     os.makedirs(DATA_DIR, exist_ok=True)
     target_dir = os.path.join(DATA_DIR, "cifar-10-batches-py")
     if os.path.exists(target_dir) and len(os.listdir(target_dir)) >= 6:
         print("CIFAR-10 already extracted and ready.")
-        return 0
+        return True
 
-    chunk_size = TOTAL_SIZE // NUM_CHUNKS
-    ranges = []
-    for i in range(NUM_CHUNKS):
-        start = i * chunk_size
-        end = TOTAL_SIZE - 1 if i == NUM_CHUNKS - 1 else (i + 1) * chunk_size - 1
-        ranges.append((i, start, end))
+    # Method 1: Use Torchvision native downloader with retries
+    print("Attempting torchvision native CIFAR-10 download...")
+    for attempt in range(5):
+        try:
+            datasets.CIFAR10(root=DATA_DIR, train=True, download=True)
+            datasets.CIFAR10(root=DATA_DIR, train=False, download=True)
+            if os.path.exists(target_dir) and len(os.listdir(target_dir)) >= 6:
+                print("CIFAR-10 prepared successfully via torchvision.")
+                return True
+        except Exception as e:
+            print(f"Torchvision download attempt {attempt+1} failed: {e}. Retrying in 3s...")
+            time.sleep(3.0)
 
-    print(f"Downloading CIFAR-10 in {NUM_CHUNKS} parallel streaming connections...")
-    t0 = time.time()
-    with concurrent.futures.ThreadPoolExecutor(max_workers=NUM_CHUNKS) as executor:
-        futures = [executor.submit(download_chunk, cid, s, e) for cid, s, e in ranges]
-        for f in concurrent.futures.as_completed(futures):
-            cid, success = f.result()
-            if not success:
-                print(f"Failed chunk {cid}")
-                return 1
+    # Method 2: Direct UofT mirror stream
+    url = "https://cave.cs.toronto.edu/kriz/cifar-10-python.tar.gz"
+    tar_path = os.path.join(DATA_DIR, "cifar-10-python.tar.gz")
+    print(f"Attempting direct stream download from {url}...")
+    for attempt in range(5):
+        try:
+            req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+            with urllib.request.urlopen(req, timeout=300) as response, open(tar_path, "wb") as out_file:
+                while True:
+                    buf = response.read(1024 * 1024)
+                    if not buf:
+                        break
+                    out_file.write(buf)
+            print("Extracting downloaded tarball...")
+            with tarfile.open(tar_path, "r:gz") as tar:
+                tar.extractall(path=DATA_DIR)
+            if os.path.exists(target_dir) and len(os.listdir(target_dir)) >= 6:
+                print("CIFAR-10 extracted successfully.")
+                return True
+        except Exception as e:
+            print(f"Direct download attempt {attempt+1} failed: {e}. Retrying...")
+            time.sleep(3.0)
 
-    dt = time.time() - t0
-    print(f"All {NUM_CHUNKS} chunks downloaded in {dt:.1f}s ({TOTAL_SIZE/dt/1024/1024:.2f} MB/s). Assembling...")
+    return False
 
-    # Assemble
-    with open(TAR_PATH, "wb") as outfile:
-        for i in range(NUM_CHUNKS):
-            chunk_file = os.path.join(DATA_DIR, f"cifar_part_{i:02d}.tmp")
-            with open(chunk_file, "rb") as infile:
-                outfile.write(infile.read())
-            os.remove(chunk_file)
 
-    print("Extracting tarball...")
-    with tarfile.open(TAR_PATH, "r:gz") as tar:
-        tar.extractall(path=DATA_DIR)
-
-    print("CIFAR-10 extracted successfully.")
-    return 0
+def main():
+    success = ensure_cifar10_ready()
+    return 0 if success else 1
 
 
 if __name__ == "__main__":
