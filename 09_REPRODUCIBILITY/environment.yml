@@ -1,0 +1,24 @@
+name: label-noise-gen
+channels:
+  - pytorch
+  - nvidia
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.10
+  - pip=24.0
+  - numpy=1.26.4
+  - scipy=1.13.0
+  - pandas=2.2.2
+  - scikit-learn=1.4.2
+  - matplotlib=3.8.4
+  - seaborn=0.13.2
+  - pyyaml=6.0.1
+  - tqdm=4.66.4
+  - pytest=8.2.0
+  - pip:
+      - torch==2.2.2
+      - torchvision==0.17.2
+      - torchaudio==2.2.2
+      - cleanlab==2.6.3
+      - timm==0.9.16

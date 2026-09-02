@@ -1,0 +1,79 @@
+# Master Default Configuration for Label Noise Experiments
+project:
+  name: "label-noise-generalisation"
+  version: "1.0.0"
+  phase: "Phase 0 Scaffold"
+
+seeds:
+  - 42
+  - 1337
+  - 2024
+  - 7
+  - 999
+
+datasets:
+  synthetic:
+    - name: "cifar10"
+      num_classes: 10
+      noise_types: ["symmetric", "asymmetric"]
+      noise_rates: [0.0, 0.2, 0.4, 0.6, 0.8]
+    - name: "cifar100"
+      num_classes: 100
+      noise_types: ["symmetric", "asymmetric"]
+      noise_rates: [0.0, 0.2, 0.4, 0.6]
+    - name: "mnist"
+      num_classes: 10
+      noise_types: ["symmetric"]
+      noise_rates: [0.0, 0.2, 0.5]
+    - name: "uci_adult"
+      num_classes: 2
+      noise_types: ["symmetric", "asymmetric"]
+      noise_rates: [0.0, 0.1, 0.3]
+  real_world:
+    - name: "cifar10n"
+      regimes: ["clean", "aggre", "random1", "random2", "random3", "worst"]
+    - name: "animal10n"
+
+models:
+  logistic_regression:
+    max_iter: 100
+    lr: 0.05
+  decision_tree:
+    max_depth: 15
+  mlp:
+    hidden_dim: 512
+    dropout: 0.2
+    lr: 0.001
+  resnet18:
+    arch: "PreActResNet18"
+    lr: 0.1
+    momentum: 0.9
+    weight_decay: 0.0005
+    epochs: 120
+    batch_size: 128
+    lr_schedule: "cosine"
+
+baselines:
+  - "CE"
+  - "LabelSmoothing"
+  - "MAE"
+  - "GCE"
+  - "SCE"
+  - "ForwardCorrection"
+  - "BackwardCorrection"
+  - "DualT"
+  - "ConfidentLearning"
+  - "DivideMix"
+
+metrics:
+  classification:
+    - "top1_accuracy"
+    - "top5_accuracy"
+  calibration:
+    - "ece_15bins"
+    - "ada_ece"
+    - "brier_score"
+    - "nll"
+  estimation:
+    - "frobenius_error"
+    - "spectral_error"

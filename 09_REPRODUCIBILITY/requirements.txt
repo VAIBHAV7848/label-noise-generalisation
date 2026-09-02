@@ -1,0 +1,14 @@
+# Pinned core scientific & deep learning dependencies
+torch==2.2.2
+torchvision==0.17.2
+numpy==1.26.4
+scipy==1.13.0
+pandas==2.2.2
+scikit-learn==1.4.2
+cleanlab==2.6.3
+matplotlib==3.8.4
+seaborn==0.13.2
+pyyaml==6.0.1
+tqdm==4.66.4
+pytest==8.2.0
+timm==0.9.16
