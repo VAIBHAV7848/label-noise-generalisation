@@ -22,25 +22,45 @@ $$\left| \mathbb{E}_{\tilde{\mathcal{D}}} [\hat{\ell}_{\text{backward}}(f(X), \t
 ---
 
 ## Proposition 2B (Finite-Sample Clean Excess Risk under Sample-Split / Independent Estimation)
-Assume the base surrogate loss $\ell$ is $M$-bounded ($0 \le \ell \le M$) and $L_{\ell}$-Lipschitz with respect to the $\ell_2$ norm. Let $\hat{T}$ be estimated from an independent training partition $S_T$ (or conditional on $\hat{T}$ fixed with respect to $S_R$) such that $\|\hat{T} - T\|_F \le \epsilon < \frac{1}{\|T^{-1}\|_2}$. Let $\hat{f} = \arg\min_{f \in \mathcal{F}} \hat{R}_{S_R, \hat{T}}(f)$ be the empirical risk minimizer over an independent noisy sample $S_R = \{(x_i, \tilde{y}_i)\}_{i=1}^{n_R} \overset{\text{i.i.d.}}{\sim} \tilde{\mathcal{D}}$.
+Assume the base surrogate loss $\ell$ is $M$-bounded ($0 \le \ell \le M$) and $L_{\ell, 2}$-Lipschitz with respect to the Euclidean $\ell_2$ norm on $\Delta^{K-1}$. Let $\hat{T}$ be estimated from an independent training partition $S_T$ (or conditional on $\hat{T}$ fixed with respect to $S_R$) such that $\|\hat{T} - T\|_F \le \epsilon < \frac{1}{\|T^{-1}\|_2}$. Let $\hat{f} = \arg\min_{f \in \mathcal{F}} \hat{R}_{S_R, \hat{T}}(f)$ be the empirical risk minimizer over an independent noisy sample $S_R = \{(x_i, \tilde{y}_i)\}_{i=1}^{n_R} \overset{\text{i.i.d.}}{\sim} \tilde{\mathcal{D}}$.
 
 Then with probability at least $1 - \delta$ over the random draw of $S_R$:
-$$\mathcal{E}(\hat{f}) = R_{\mathcal{D}}(\hat{f}) - \min_{f \in \mathcal{F}} R_{\mathcal{D}}(f) \le \frac{2 \sqrt{K} M \|T^{-1}\|_2^2 \epsilon}{1 - \|T^{-1}\|_2 \epsilon} + 4 \sqrt{2} L_{\ell} \|\hat{T}^{-1}\|_2 \mathcal{R}_{n_R}(\mathcal{F}) + 2 \sqrt{K} M \|\hat{T}^{-1}\|_2 \sqrt{\frac{\ln(2/\delta)}{2n_R}}$$
+$$\mathcal{E}(\hat{f}) = R_{\mathcal{D}}(\hat{f}) - \min_{f \in \mathcal{F}} R_{\mathcal{D}}(f) \le \frac{2 \sqrt{K} M \|T^{-1}\|_2^2 \epsilon}{1 - \|T^{-1}\|_2 \epsilon} + 4 \sqrt{2} L_{\ell, 2} \|\hat{T}^{-1}\|_2 \mathcal{R}_{n_R}(\mathcal{F}) + 2 \sqrt{K} M \|\hat{T}^{-1}\|_2 \sqrt{\frac{\ln(2/\delta)}{2n_R}}$$
 
 ---
 
 ### Loss Taxonomy & Applicability Matrix for Proposition 2B
 
-The uniform concentration in Proposition 2B strictly requires $0 \le \ell \le M$ and $L_\ell$-Lipschitz continuity on the prediction domain. The table below audits all project-relevant loss functions:
+The uniform concentration in Proposition 2B strictly requires $0 \le \ell \le M$ and $L_{\ell, 2}$-Lipschitz continuity with respect to the $\ell_2$ norm. Below is the first-principles audit of all project-relevant losses:
 
-| Loss Function | Bounded on $\Delta^{K-1}$? | Globally Lipschitz on $\Delta^{K-1}$? | Prop 2B Directly Applicable? | Rigorous Mathematical Condition |
-| :--- | :---: | :---: | :---: | :--- |
-| **Mean Absolute Error (MAE / $L_1$)** | **YES** ($M = 2$) | **YES** ($L_\ell = 2$) | **YES (Unconditional)** | Unconditionally satisfies all Proposition 2B requirements globally. |
-| **Forward Loss Correction ($\ell_{\text{forward}}$)** | **YES** ($M = -\log T_{\min}$) | **YES** ($L_\ell = 1/T_{\min}$) | **YES (Under $T_{\min} > 0$)** | Holds whenever minimum transition entry $T_{\min} = \min_{i, j} T_{ij} > 0$. |
-| **Generalized Cross Entropy (GCE, $q=0.7$)** | **YES** ($M = 1/q \approx 1.43$) | **NO** ($\lim_{p \to 0} L_q' = -\infty$) | **CONDITIONAL** | $L_q(p) = \frac{1-p^q}{q}$ has derivative $-p^{q-1} \to -\infty$ as $p \to 0$. Requires probability floor $p_y \ge \epsilon > 0$ for Lipschitz condition ($L_\ell = \epsilon^{q-1} = \epsilon^{-0.3}$). |
-| **Categorical Cross-Entropy (CE)** | **NO** ($\lim_{p \to 0} -\log p = +\infty$) | **NO** ($\lim_{p \to 0} -1/p = -\infty$) | **CONDITIONAL** | Unbounded on open simplex. Requires probability floor $p_y \ge \epsilon > 0$ ($M = -\log \epsilon, L_\ell = 1/\epsilon$) or bounded logit domain $\|z\|_\infty \le B$. |
-| **Symmetric Cross Entropy (SCE)** | **NO** (due to CE term) | **NO** (due to CE term) | **CONDITIONAL** | RCE term is bounded; CE term requires probability floor $p_y \ge \epsilon > 0$. |
-| **Backward Loss Correction ($\ell_{\text{backward}}$)** | **Depends on base loss** | **Depends on base loss** | **CONDITIONAL** | Requires bounded and Lipschitz base surrogate loss (e.g., MAE or clamped CE). |
+| Loss Function | Definition $\ell(\mathbf{p}, y)$ | $M$ (Bound) | Globally $\ell_2$-Lipschitz? | Exact $L_{\ell, 2}$ Constant | Mathematical Domain Conditions | Proposition 2B Scope |
+| :--- | :--- | :---: | :---: | :---: | :--- | :---: |
+| **Mean Absolute Error (MAE / $L_1$)** | $\|\mathbf{p} - \mathbf{e}_y\|_1 = 2 - 2 p_y$ | $2$ | **YES** | $2$ (or $2\sqrt{\frac{K-1}{K}}$ on simplex) | None (unconditionally holds on $\Delta^{K-1}$). | **Category A (Directly Applicable)** |
+| **Forward Loss Correction ($\ell_{\text{forward}}$)** | $-\log([T^\top \mathbf{p}]_y)$ | $-\log(T_{\min})$ | **YES** (if $T_{\min} > 0$) | $\frac{\|T_{:, y}\|_2}{T_{\min}} \le \frac{1}{T_{\min}}$ | Minimum transition entry $T_{\min} = \min_{i, j} T_{ij} > 0$. | **Category A (Directly Applicable under $T_{\min} > 0$)** |
+| **Backward Loss Correction ($\ell_{\text{backward}}$)** | $[T^{-1} \vec{\ell}(\mathbf{p})]_y$ | $\sqrt{K} M_{\text{base}} \|T^{-1}\|_2$ | **Depends on base** | $\|T^{-1}\|_2 L_{\text{base}, 2}$ | Base surrogate loss $\ell$ is $M_{\text{base}}$-bounded & $L_{\text{base}, 2}$-Lipschitz. | **Category A (for MAE base) / Category C (for CE base)** |
+| **Generalized Cross Entropy (GCE, $q=0.7$)** | $\frac{1 - p_y^q}{q}$ | $\frac{1}{q} \approx 1.43$ | **NO** ($\lim_{p \to 0} L_q' = -\infty$) | $\epsilon_{\text{clamp}}^{q-1} \approx 125.89$ (on clamped domain) | Globally bounded; requires probability floor $p_y \ge \epsilon_{\text{clamp}} > 0$ for Lipschitz condition. | **Category C (Conditional on Clamping)** |
+| **Reverse Cross Entropy (RCE)** | $-\sum_k p_k \log(\bar{\mathbf{e}}_{y, k})$ | $-\log(\epsilon_{\text{clamp}}) \approx 16.12$ | **YES** | $-\log(\epsilon_{\text{clamp}}) \approx 16.12$ | One-hot target vector clamped to $\bar{\mathbf{e}}_{y, k} \ge \epsilon_{\text{clamp}} = 10^{-7}$. | **Category A (under Clamped RCE)** |
+| **Categorical Cross-Entropy (CE)** | $-\log p_y$ | $+\infty$ (unbounded) | **NO** ($\lim_{p \to 0} -1/p = -\infty$) | $\frac{1}{\epsilon_{\text{clamp}}} = 10^7$ (on clamped domain) | Unbounded on open simplex; requires $p_y \ge \epsilon_{\text{clamp}} > 0$ or bounded logits. | **Category B (Empirical Baseline) / Category C (Clamped)** |
+| **Symmetric Cross Entropy (SCE)** | $\alpha \ell_{\text{CE}} + \beta \ell_{\text{RCE}}$ | $+\infty$ (unbounded) | **NO** (due to CE term) | $\frac{\alpha}{\epsilon_{\text{clamp}}} + \beta \ln(\frac{1}{\epsilon_{\text{clamp}}})$ (clamped) | Unbounded on open simplex; requires $p_y \ge \epsilon_{\text{clamp}} > 0$ for CE component. | **Category B (Empirical Baseline) / Category C (Clamped)** |
+
+---
+
+### Four-Tier Scope Categorization for Proposition 2B
+
+1. **Category A — Genuinely Covered by Proposition 2B**:
+   - Multi-Class MAE ($M = 2, L_{\ell, 2} = 2$).
+   - Forward Loss Correction under non-zero noise floor $T_{\min} > 0$ ($M = -\log T_{\min}, L_{\ell, 2} = 1/T_{\min}$).
+   - Backward Loss Correction using MAE as base loss ($M = 2\sqrt{K}\|T^{-1}\|_2, L_{\ell, 2} = 2\|T^{-1}\|_2$).
+2. **Category B — Empirical Baselines & Diagnostic Controls**:
+   - Standard Uncorrected Categorical Cross-Entropy (CE).
+   - Label Smoothing Cross-Entropy.
+   *(Evaluated empirically in the 84-run pilot to benchmark deep learning baselines; not claimed as covered by Proposition 2B without domain clamping).*
+3. **Category C — Covered Under Explicit Probability Clamping / Domain Restrictions**:
+   - Generalized Cross Entropy (GCE, $q=0.7$) with probability floor $p_y \ge \epsilon_{\text{clamp}} > 0$ ($M \approx 1.43, L_{\ell, 2} \approx 125.89$).
+   - Symmetric Cross Entropy (SCE) with probability floor $p_y \ge \epsilon_{\text{clamp}} > 0$.
+   - Backward Loss Correction with clamped CE base loss.
+4. **Category D — Requiring Sub-Exponential / Bernstein Concentration Arguments**:
+   - Unclipped continuous Cross-Entropy on the open probability simplex $(0, 1]^K$.
 
 ---
 

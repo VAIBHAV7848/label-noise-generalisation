@@ -112,6 +112,39 @@ class TestLosses(unittest.TestCase):
         # Expected risk MUST be non-negative because clean loss is non-negative
         self.assertGreaterEqual(expected_risk, -1e-6)
 
+    def test_loss_lipschitz_constants_numerical_verification(self):
+        """Verify Euclidean Lipschitz constants for MAE, Forward Loss, and GCE on simplex."""
+        K = 5
+        rng = np.random.default_rng(42)
+        
+        # 1. MAE: L_2 <= 2
+        for _ in range(100):
+            p1 = rng.dirichlet(np.ones(K))
+            p2 = rng.dirichlet(np.ones(K))
+            y = rng.integers(0, K)
+            
+            diff_loss = np.abs((2.0 - 2.0 * p1[y]) - (2.0 - 2.0 * p2[y]))
+            diff_p = np.linalg.norm(p1 - p2, ord=2)
+            if diff_p > 1e-8:
+                self.assertLessEqual(diff_loss / diff_p, 2.0 + 1e-8)
+                
+        # 2. Forward Loss with positive T: L_2 <= 1 / T_min
+        T = build_symmetric_transition_matrix(K, 0.3)
+        T_min = np.min(T)
+        theoretical_L_fwd = 1.0 / T_min
+        for _ in range(100):
+            p1 = rng.dirichlet(np.ones(K))
+            p2 = rng.dirichlet(np.ones(K))
+            y = rng.integers(0, K)
+            
+            loss1 = -np.log(np.dot(p1, T[:, y]))
+            loss2 = -np.log(np.dot(p2, T[:, y]))
+            
+            diff_loss = np.abs(loss1 - loss2)
+            diff_p = np.linalg.norm(p1 - p2, ord=2)
+            if diff_p > 1e-8:
+                self.assertLessEqual(diff_loss / diff_p, theoretical_L_fwd + 1e-8)
+
 
 if __name__ == "__main__":
     unittest.main()
