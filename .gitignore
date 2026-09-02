@@ -68,7 +68,12 @@ venv.bak/
 *.swo
 
 # Large datasets and raw model checkpoints (keep scripts and configs tracked)
+data/
 data/raw/
+kaggle_kernels/
+kaggle_runner/
+kaggle.json
+*.tmp
 *.pt
 *.pth
 *.onnx
@@ -78,3 +83,4 @@ data/raw/
 # OS generated
 .DS_Store
 Thumbs.db
+
