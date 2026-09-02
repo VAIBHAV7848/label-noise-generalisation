@@ -1,8 +1,8 @@
-# Master Default Configuration for Label Noise Experiments
+# Master Default Configuration for Minimum Decisive Experiment Set (MDES)
 project:
   name: "label-noise-generalisation"
-  version: "1.0.0"
-  phase: "Phase 0 Scaffold"
+  version: "1.1.0"
+  phase: "MDES Scoped Execution"
 
 seeds:
   - 42
@@ -15,35 +15,21 @@ datasets:
   synthetic:
     - name: "cifar10"
       num_classes: 10
-      noise_types: ["symmetric", "asymmetric"]
-      noise_rates: [0.0, 0.2, 0.4, 0.6, 0.8]
+      regimes:
+        - type: "symmetric"
+          rates: [0.2, 0.5]
+        - type: "asymmetric"
+          rates: [0.2, 0.4]
     - name: "cifar100"
       num_classes: 100
-      noise_types: ["symmetric", "asymmetric"]
-      noise_rates: [0.0, 0.2, 0.4, 0.6]
-    - name: "mnist"
-      num_classes: 10
-      noise_types: ["symmetric"]
-      noise_rates: [0.0, 0.2, 0.5]
-    - name: "uci_adult"
-      num_classes: 2
-      noise_types: ["symmetric", "asymmetric"]
-      noise_rates: [0.0, 0.1, 0.3]
+      regimes:
+        - type: "symmetric"
+          rates: [0.4]
   real_world:
     - name: "cifar10n"
-      regimes: ["clean", "aggre", "random1", "random2", "random3", "worst"]
-    - name: "animal10n"
+      regimes: ["aggre", "worst"]
 
 models:
-  logistic_regression:
-    max_iter: 100
-    lr: 0.05
-  decision_tree:
-    max_depth: 15
-  mlp:
-    hidden_dim: 512
-    dropout: 0.2
-    lr: 0.001
   resnet18:
     arch: "PreActResNet18"
     lr: 0.1
@@ -52,18 +38,22 @@ models:
     epochs: 120
     batch_size: 128
     lr_schedule: "cosine"
+  mlp:
+    arch: "TwoLayerMLP"
+    hidden_dim: 512
+    dropout: 0.2
+    lr: 0.001
+    epochs: 100
+    batch_size: 128
 
 baselines:
   - "CE"
   - "LabelSmoothing"
-  - "MAE"
   - "GCE"
   - "SCE"
   - "ForwardCorrection"
   - "BackwardCorrection"
-  - "DualT"
   - "ConfidentLearning"
-  - "DivideMix"
 
 metrics:
   classification:
@@ -73,7 +63,7 @@ metrics:
     - "ece_15bins"
     - "ada_ece"
     - "brier_score"
-    - "nll"
+    - "val_calibration_delta"
   estimation:
     - "frobenius_error"
     - "spectral_error"
