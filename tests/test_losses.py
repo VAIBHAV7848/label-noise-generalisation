@@ -145,6 +145,26 @@ class TestLosses(unittest.TestCase):
             if diff_p > 1e-8:
                 self.assertLessEqual(diff_loss / diff_p, theoretical_L_fwd + 1e-8)
 
+    def test_forward_loss_sparse_asymmetric_numerical_clamping(self):
+        """Verify that sparse asymmetric forward loss is finite on zero-transition pairs solely due to clamp."""
+        from src.noise.matrix_utils import build_asymmetric_cifar10_transition_matrix
+        
+        T_asym = build_asymmetric_cifar10_transition_matrix(0.4)
+        self.assertEqual(np.min(T_asym), 0.0)
+        
+        forward_loss = ForwardLossCorrection(transition_matrix=T_asym, eps=1e-7)
+        
+        # High confidence for class 0 (airplane), but observed noisy label is class 6 (frog) where T[0, 6] == 0
+        self.assertEqual(T_asym[0, 6], 0.0)
+        logits = torch.tensor([[50.0, -50.0, -50.0, -50.0, -50.0, -50.0, -50.0, -50.0, -50.0, -50.0]])
+        target_6 = torch.tensor([6])
+        
+        loss_val = forward_loss(logits, target_6).item()
+        
+        # Loss must be finite and bounded by -log(1e-7) approx 16.118
+        self.assertTrue(np.isfinite(loss_val))
+        self.assertTrue(np.isclose(loss_val, -np.log(1e-7), atol=1e-3))
+
 
 if __name__ == "__main__":
     unittest.main()

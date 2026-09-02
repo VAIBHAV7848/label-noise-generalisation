@@ -31,14 +31,15 @@ $$\mathcal{E}(\hat{f}) = R_{\mathcal{D}}(\hat{f}) - \min_{f \in \mathcal{F}} R_{
 
 ### Loss Taxonomy & Applicability Matrix for Proposition 2B
 
-The uniform concentration in Proposition 2B strictly requires $0 \le \ell \le M$ and $L_{\ell, 2}$-Lipschitz continuity with respect to the $\ell_2$ norm. Below is the first-principles audit of all project-relevant losses:
+The uniform concentration in Proposition 2B strictly requires $0 \le \ell \le M$ and $L_{\ell, 2}$-Lipschitz continuity with respect to the $\ell_2$ norm on the prediction domain. Below is the first-principles audit of all project-relevant losses:
 
 | Loss Function | Definition $\ell(\mathbf{p}, y)$ | $M$ (Bound) | Globally $\ell_2$-Lipschitz? | Exact $L_{\ell, 2}$ Constant | Mathematical Domain Conditions | Proposition 2B Scope |
 | :--- | :--- | :---: | :---: | :---: | :--- | :---: |
-| **Mean Absolute Error (MAE / $L_1$)** | $\|\mathbf{p} - \mathbf{e}_y\|_1 = 2 - 2 p_y$ | $2$ | **YES** | $2$ (or $2\sqrt{\frac{K-1}{K}}$ on simplex) | None (unconditionally holds on $\Delta^{K-1}$). | **Category A (Directly Applicable)** |
-| **Forward Loss Correction ($\ell_{\text{forward}}$)** | $-\log([T^\top \mathbf{p}]_y)$ | $-\log(T_{\min})$ | **YES** (if $T_{\min} > 0$) | $\frac{\|T_{:, y}\|_2}{T_{\min}} \le \frac{1}{T_{\min}}$ | Minimum transition entry $T_{\min} = \min_{i, j} T_{ij} > 0$. | **Category A (Directly Applicable under $T_{\min} > 0$)** |
+| **Mean Absolute Error (MAE / $L_1$)** | $\|\mathbf{p} - \mathbf{e}_y\|_1 = 2 - 2 p_y$ | $2$ | **YES** | $2$ (or $2\sqrt{\frac{K-1}{K}}$ on simplex) | None (unconditionally holds globally on $\Delta^{K-1}$). | **Category A (Directly Applicable)** |
+| **Forward Loss Correction (Dense $T$, $T_{\min} > 0$)** | $-\log([T^\top \mathbf{p}]_y) \equiv -\log([\mathbf{p} T]_y)$ | $-\log(T_{\min})$ | **YES** | $\frac{\|T_{:, y}\|_2}{T_{\min}} \le \frac{1}{T_{\min}}$ | Dense transition matrix with strictly positive entries $T_{\min} = \min_{i, j} T_{ij} > 0$ (e.g. Symmetric noise $\eta=0.2, 0.5$). | **Category A (Directly Applicable without Clamping)** |
+| **Forward Loss Correction (Sparse $T$, $T_{\min} = 0$)** | $-\log([T^\top \mathbf{p}]_y) \equiv -\log([\mathbf{p} T]_y)$ | $+\infty$ (unbounded unclipped) | **NO** | $\frac{1}{\epsilon_{\text{clamp}}} = 10^7$ (clamped) | Sparse matrix ($T_{\min} = 0$, e.g. Asymmetric pair-flip or Clean $T=I$); requires implementation clamp $\epsilon_{\text{clamp}} = 10^{-7}$ or support floor. | **Category C (Conditional on Numerical Clamping)** |
 | **Backward Loss Correction ($\ell_{\text{backward}}$)** | $[T^{-1} \vec{\ell}(\mathbf{p})]_y$ | $\sqrt{K} M_{\text{base}} \|T^{-1}\|_2$ | **Depends on base** | $\|T^{-1}\|_2 L_{\text{base}, 2}$ | Base surrogate loss $\ell$ is $M_{\text{base}}$-bounded & $L_{\text{base}, 2}$-Lipschitz. | **Category A (for MAE base) / Category C (for CE base)** |
-| **Generalized Cross Entropy (GCE, $q=0.7$)** | $\frac{1 - p_y^q}{q}$ | $\frac{1}{q} \approx 1.43$ | **NO** ($\lim_{p \to 0} L_q' = -\infty$) | $\epsilon_{\text{clamp}}^{q-1} \approx 125.89$ (on clamped domain) | Globally bounded; requires probability floor $p_y \ge \epsilon_{\text{clamp}} > 0$ for Lipschitz condition. | **Category C (Conditional on Clamping)** |
+| **Generalized Cross Entropy (GCE, $q=0.7$)** | $\frac{1 - p_y^q}{q}$ | $\frac{1}{q} \approx 1.43$ | **NO** ($\lim_{p \to 0} L_q' = -\infty$) | $\epsilon_{\text{clamp}}^{q-1} \approx 125.89$ (on clamped domain) | Globally bounded; requires probability floor $p_y \ge \epsilon_{\text{clamp}} > 0$ for Lipschitz condition ($L_q' \to -\infty$ as $p_y \to 0$). | **Category C (Conditional on Clamping)** |
 | **Reverse Cross Entropy (RCE)** | $-\sum_k p_k \log(\bar{\mathbf{e}}_{y, k})$ | $-\log(\epsilon_{\text{clamp}}) \approx 16.12$ | **YES** | $-\log(\epsilon_{\text{clamp}}) \approx 16.12$ | One-hot target vector clamped to $\bar{\mathbf{e}}_{y, k} \ge \epsilon_{\text{clamp}} = 10^{-7}$. | **Category A (under Clamped RCE)** |
 | **Categorical Cross-Entropy (CE)** | $-\log p_y$ | $+\infty$ (unbounded) | **NO** ($\lim_{p \to 0} -1/p = -\infty$) | $\frac{1}{\epsilon_{\text{clamp}}} = 10^7$ (on clamped domain) | Unbounded on open simplex; requires $p_y \ge \epsilon_{\text{clamp}} > 0$ or bounded logits. | **Category B (Empirical Baseline) / Category C (Clamped)** |
 | **Symmetric Cross Entropy (SCE)** | $\alpha \ell_{\text{CE}} + \beta \ell_{\text{RCE}}$ | $+\infty$ (unbounded) | **NO** (due to CE term) | $\frac{\alpha}{\epsilon_{\text{clamp}}} + \beta \ln(\frac{1}{\epsilon_{\text{clamp}}})$ (clamped) | Unbounded on open simplex; requires $p_y \ge \epsilon_{\text{clamp}} > 0$ for CE component. | **Category B (Empirical Baseline) / Category C (Clamped)** |
@@ -47,20 +48,31 @@ The uniform concentration in Proposition 2B strictly requires $0 \le \ell \le M$
 
 ### Four-Tier Scope Categorization for Proposition 2B
 
-1. **Category A — Genuinely Covered by Proposition 2B**:
+1. **Category A — Genuinely Covered by Proposition 2B Unconditionally**:
    - Multi-Class MAE ($M = 2, L_{\ell, 2} = 2$).
-   - Forward Loss Correction under non-zero noise floor $T_{\min} > 0$ ($M = -\log T_{\min}, L_{\ell, 2} = 1/T_{\min}$).
+   - Forward Loss Correction under dense transition matrices with non-zero noise floor $T_{\min} = \min_{i, j} T_{ij} > 0$ ($M = -\log T_{\min}, L_{\ell, 2} \le 1/T_{\min}$).
    - Backward Loss Correction using MAE as base loss ($M = 2\sqrt{K}\|T^{-1}\|_2, L_{\ell, 2} = 2\|T^{-1}\|_2$).
 2. **Category B — Empirical Baselines & Diagnostic Controls**:
    - Standard Uncorrected Categorical Cross-Entropy (CE).
    - Label Smoothing Cross-Entropy.
    *(Evaluated empirically in the 84-run pilot to benchmark deep learning baselines; not claimed as covered by Proposition 2B without domain clamping).*
 3. **Category C — Covered Under Explicit Probability Clamping / Domain Restrictions**:
+   - Forward Loss Correction under sparse asymmetric pair-flip noise ($T_{\min} = 0$) or clean data ($T=I$), which is bounded only due to the implementation's numerical clamp $p_{\text{corrupted}} \ge \epsilon_{\text{clamp}} = 10^{-7}$ ($M = -\log(10^{-7}) \approx 16.12, L_{\ell, 2} = 10^7$).
    - Generalized Cross Entropy (GCE, $q=0.7$) with probability floor $p_y \ge \epsilon_{\text{clamp}} > 0$ ($M \approx 1.43, L_{\ell, 2} \approx 125.89$).
    - Symmetric Cross Entropy (SCE) with probability floor $p_y \ge \epsilon_{\text{clamp}} > 0$.
    - Backward Loss Correction with clamped CE base loss.
 4. **Category D — Requiring Sub-Exponential / Bernstein Concentration Arguments**:
    - Unclipped continuous Cross-Entropy on the open probability simplex $(0, 1]^K$.
+
+---
+
+### Remark on Matrix Orientation and Equivalences
+- Let $\mathbf{p}_{\text{row}} \in \Delta^{K-1}$ denote a row probability vector and $\mathbf{p}_{\text{col}} \in \Delta^{K-1}$ denote a column probability vector.
+- Let $T \in [0, 1]^{K \times K}$ be a row-stochastic transition matrix where $T_{ij} = P(\tilde{Y}=j \mid Y=i)$ ($\sum_{j=1}^K T_{ij} = 1$).
+- The corrupted class probability vector is identically expressed as:
+  $$\tilde{\mathbf{p}}_{\text{row}} = \mathbf{p}_{\text{row}} T \quad \Longleftrightarrow \quad \tilde{\mathbf{p}}_{\text{col}} = T^\top \mathbf{p}_{\text{col}}$$
+- For observed noisy label $\tilde{y}$, the $j$-th corrupted component is $[\mathbf{p}_{\text{row}} T]_{\tilde{y}} = [T^\top \mathbf{p}_{\text{col}}]_{\tilde{y}} = \sum_{i=1}^K p_i T_{i, \tilde{y}}$.
+- In PyTorch code (`src/losses/loss_correction.py`), `torch.matmul(probs, self.T)` operates on batch row vectors, exactly matching $[T^\top \mathbf{p}]_{\tilde{y}}$.
 
 ---
 

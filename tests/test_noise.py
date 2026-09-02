@@ -67,5 +67,21 @@ class TestNoise(unittest.TestCase):
         self.assertTrue(np.isclose(emp_rate, noise_rate, atol=0.02))
 
 
+    def test_dense_symmetric_vs_sparse_asymmetric_min_entries(self):
+        """Mechanically verify that symmetric T has T_min > 0 while asymmetric pair-flip T has T_min == 0."""
+        # Symmetric dense matrix
+        for eta in [0.2, 0.5]:
+            T_sym = build_symmetric_transition_matrix(10, eta)
+            expected_min = eta / 9.0
+            self.assertTrue(np.isclose(np.min(T_sym), expected_min), f"Symmetric T_min should be {expected_min}")
+            self.assertGreater(np.min(T_sym), 0.0)
+
+        # Asymmetric sparse pair-flip matrix
+        T_asym = build_asymmetric_cifar10_transition_matrix(0.4)
+        self.assertEqual(np.min(T_asym), 0.0, "Asymmetric pair-flip matrix MUST have T_min == 0.0")
+        zero_count = np.sum(T_asym == 0.0)
+        self.assertEqual(zero_count, 85, "CIFAR-10 pair-flip matrix must contain exactly 85 zero entries")
+
+
 if __name__ == "__main__":
     unittest.main()
