@@ -64,7 +64,8 @@ repo_dir = "/kaggle/working/repo"
 if os.path.exists(repo_dir):
     shutil.rmtree(repo_dir)
 
-subprocess.run(["git", "clone", "https://github.com/VAIBHAV7848/label-noise-generalisation.git", repo_dir], check=True)
+GITHUB_AUTH_URL = os.environ.get("GITHUB_CLONE_URL", "https://github.com/VAIBHAV7848/label-noise-generalisation.git")
+subprocess.run(["git", "clone", GITHUB_AUTH_URL, repo_dir], check=True)
 os.chdir(repo_dir)
 
 # 2. Download CIFAR-10
