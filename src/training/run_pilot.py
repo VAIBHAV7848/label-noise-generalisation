@@ -1,12 +1,14 @@
 """Phase 2 Pre-Registered Pilot Runner for Label Noise & Calibration Benchmarking.
 
 Executes the registered 84-run diagnostic grid across CIFAR-10 with structured JSON provenance.
+Supports single run selection, batch chunking, resumability, and manifest audit validation for Kaggle / cluster execution.
 """
 
 import os
 import sys
 import json
 import time
+import argparse
 import datetime
 import subprocess
 import torch
@@ -34,7 +36,6 @@ from ..data.transforms import get_cifar_transforms
 from ..metrics.classification import compute_topk_accuracy
 from ..metrics.calibration import compute_ece, compute_adaptive_ece, compute_brier_score
 from ..training.temperature_scaling import ModelWithTemperature
-
 
 from PIL import Image
 
@@ -68,6 +69,52 @@ def get_git_commit_sha() -> str:
         return "unknown"
 
 
+def validate_provenance_record(record: dict) -> bool:
+    """Validate that a provenance record is complete, valid, and uncorrupted."""
+    if not isinstance(record, dict):
+        return False
+    if record.get("status") != "COMPLETED":
+        return False
+
+    required_keys = ["provenance", "configuration", "metrics", "history"]
+    if not all(k in record for k in required_keys):
+        return False
+
+    prov = record["provenance"]
+    if not all(k in prov for k in ["experiment_id", "timestamp_utc", "git_commit_sha"]):
+        return False
+
+    metrics = record["metrics"]
+    required_metrics = [
+        "test_top1_acc",
+        "raw_test_ece",
+        "raw_ada_ece",
+        "raw_brier",
+        "ts_clean_test_ece",
+        "ts_corrupted_test_ece",
+        "val_calibration_delta",
+    ]
+    for m in required_metrics:
+        val = metrics.get(m)
+        if val is None or not np.isfinite(val):
+            return False
+
+    return True
+
+
+def check_run_already_completed(output_dir: str, experiment_id: str) -> bool:
+    """Check if valid, non-corrupted results already exist for an experiment ID."""
+    result_file = os.path.join(output_dir, f"{experiment_id}.json")
+    if not os.path.exists(result_file):
+        return False
+    try:
+        with open(result_file, "r") as f:
+            data = json.load(f)
+        return validate_provenance_record(data)
+    except Exception:
+        return False
+
+
 def build_pilot_splits(
     cifar_train: datasets.CIFAR10,
     cifar_test: datasets.CIFAR10,
@@ -99,42 +146,49 @@ def build_pilot_splits(
         train_noisy_targets = train_clean_targets.copy()
         val_corrupted_noisy_targets = val_corrupted_clean_targets.copy()
     elif noise_regime == "symmetric_0.2":
-        train_noisy_targets, T, _, _ = generate_synthetic_noisy_labels(
-            train_clean_targets, num_classes, "symmetric", 0.2, seed
+        T = build_symmetric_transition_matrix(num_classes, 0.2)
+        train_noisy_targets, _, _, _ = generate_synthetic_noisy_labels(
+            train_clean_targets, num_classes, "symmetric", 0.2, seed=seed
         )
         val_corrupted_noisy_targets, _, _, _ = generate_synthetic_noisy_labels(
-            val_corrupted_clean_targets, num_classes, "symmetric", 0.2, seed + 1
+            val_corrupted_clean_targets, num_classes, "symmetric", 0.2, seed=seed + 1000
         )
     elif noise_regime == "symmetric_0.5":
-        train_noisy_targets, T, _, _ = generate_synthetic_noisy_labels(
-            train_clean_targets, num_classes, "symmetric", 0.5, seed
+        T = build_symmetric_transition_matrix(num_classes, 0.5)
+        train_noisy_targets, _, _, _ = generate_synthetic_noisy_labels(
+            train_clean_targets, num_classes, "symmetric", 0.5, seed=seed
         )
         val_corrupted_noisy_targets, _, _, _ = generate_synthetic_noisy_labels(
-            val_corrupted_clean_targets, num_classes, "symmetric", 0.5, seed + 1
+            val_corrupted_clean_targets, num_classes, "symmetric", 0.5, seed=seed + 1000
         )
     elif noise_regime == "asymmetric_0.4":
-        train_noisy_targets, T, _, _ = generate_synthetic_noisy_labels(
-            train_clean_targets, num_classes, "asymmetric", 0.4, seed
+        T = build_asymmetric_cifar10_transition_matrix(0.4)
+        train_noisy_targets, _, _, _ = generate_synthetic_noisy_labels(
+            train_clean_targets, num_classes, "asymmetric", 0.4, seed=seed
         )
         val_corrupted_noisy_targets, _, _, _ = generate_synthetic_noisy_labels(
-            val_corrupted_clean_targets, num_classes, "asymmetric", 0.4, seed + 1
+            val_corrupted_clean_targets, num_classes, "asymmetric", 0.4, seed=seed + 1000
         )
     else:
         raise ValueError(f"Unknown noise regime: {noise_regime}")
 
-    train_transform = get_cifar_transforms(train=True)
-    test_transform = get_cifar_transforms(train=False)
+    # Datasets and Loaders
+    train_transform, test_transform = get_cifar_transforms()
 
-    train_ds = IndexedNoisyDataset(raw_data[train_idx], train_noisy_targets, train_clean_targets, train_transform)
-    val_clean_ds = IndexedNoisyDataset(raw_data[val_clean_idx], val_clean_targets, val_clean_targets, test_transform)
+    train_ds = IndexedNoisyDataset(
+        raw_data[train_idx], train_noisy_targets, train_clean_targets, transform=train_transform
+    )
+    val_clean_ds = IndexedNoisyDataset(
+        raw_data[val_clean_idx], val_clean_targets, val_clean_targets, transform=test_transform
+    )
     val_corrupted_ds = IndexedNoisyDataset(
-        raw_data[val_corrupted_idx], val_corrupted_noisy_targets, val_corrupted_clean_targets, test_transform
+        raw_data[val_corrupted_idx], val_corrupted_noisy_targets, val_corrupted_clean_targets, transform=test_transform
     )
     test_ds = IndexedNoisyDataset(
-        cifar_test.data, np.array(cifar_test.targets), np.array(cifar_test.targets), test_transform
+        cifar_test.data, np.array(cifar_test.targets), np.array(cifar_test.targets), transform=test_transform
     )
 
-    train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True, num_workers=num_workers, pin_memory=True)
+    train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True, num_workers=num_workers)
     val_clean_loader = DataLoader(val_clean_ds, batch_size=batch_size, shuffle=False, num_workers=num_workers)
     val_corrupted_loader = DataLoader(val_corrupted_ds, batch_size=batch_size, shuffle=False, num_workers=num_workers)
     test_loader = DataLoader(test_ds, batch_size=batch_size, shuffle=False, num_workers=num_workers)
@@ -181,19 +235,28 @@ def evaluate_model_full(model: nn.Module, loader: DataLoader, device: torch.devi
 
 def run_single_experiment(
     experiment_id: str,
-    model_name: str,
-    track_name: str,
-    noise_regime: str,
-    seed: int,
     cifar_train: datasets.CIFAR10,
     cifar_test: datasets.CIFAR10,
+    noise_regime: str,
+    model_name: str,
+    track_name: str,
+    seed: int,
     output_dir: str,
     epochs: int = 30,
     batch_size: int = 128,
     lr: float = 0.05,
     device_str: str = "cuda",
+    force: bool = False,
 ) -> dict:
-    """Execute a single pilot training run and log structured JSON provenance."""
+    """Execute a single pilot training run and log structured JSON provenance.
+    
+    Skips execution if valid completed results already exist and force is False.
+    """
+    if not force and check_run_already_completed(output_dir, experiment_id):
+        result_file = os.path.join(output_dir, f"{experiment_id}.json")
+        with open(result_file, "r") as f:
+            return json.load(f)
+
     set_seed(seed)
     device = torch.device(device_str if torch.cuda.is_available() else "cpu")
 
@@ -334,7 +397,6 @@ def run_single_experiment(
             ts_clean_test_brier = float(compute_brier_score(ts_clean_test_probs, test_metrics["targets"]))
 
         # 2. Corrupted Val TS
-        # In corrupted val track, targets available for tuning are the observed noisy targets!
         corrupted_val_noisy_targets = torch.tensor(val_corrupted_loader.dataset.noisy_labels, dtype=torch.long)
         ts_corrupted_model = ModelWithTemperature(model)
         temp_corrupted = ts_corrupted_model.set_temperature(val_corrupted_eval["logits"], corrupted_val_noisy_targets)
@@ -392,6 +454,12 @@ def run_single_experiment(
             "history": history,
         }
 
+        # Save checkpoint immediately
+        checkpoint_dir = os.path.join(output_dir, "checkpoints")
+        os.makedirs(checkpoint_dir, exist_ok=True)
+        checkpoint_path = os.path.join(checkpoint_dir, f"{experiment_id}_final.pt")
+        torch.save(model.state_dict(), checkpoint_path)
+
     except Exception as e:
         provenance_record = {
             "status": "FAILED",
@@ -417,3 +485,153 @@ def run_single_experiment(
         json.dump(provenance_record, f, indent=2)
 
     return provenance_record
+
+
+def parse_args():
+    parser = argparse.ArgumentParser(description="Phase 2 Pilot Benchmark Runner for CIFAR-10")
+    parser.add_argument("--manifest", type=str, default="04_EXPERIMENTS/pilot_run_manifest.json", help="Path to manifest JSON")
+    parser.add_argument("--data-dir", type=str, default="data", help="Directory for datasets")
+    parser.add_argument("--output-dir", type=str, default="05_RESULTS/pilot", help="Directory for output JSONs and checkpoints")
+    parser.add_argument("--run-id", type=str, default=None, help="Execute a single specific experiment ID")
+    parser.add_argument("--run-ids", type=str, default=None, help="Comma-separated list of specific experiment IDs")
+    parser.add_argument("--batch-index", type=int, default=None, help="0-based batch index for parallel chunking")
+    parser.add_argument("--num-batches", type=int, default=None, help="Total number of parallel batch chunks")
+    parser.add_argument("--limit", type=int, default=None, help="Maximum number of runs to execute in this process")
+    parser.add_argument("--validate-manifest", action="store_true", help="Audit manifest and check completed results without running")
+    parser.add_argument("--force", action="store_true", help="Re-run experiments even if completed JSON exists")
+    parser.add_argument("--device", type=str, default="cuda", help="Compute device ('cuda' or 'cpu')")
+    return parser.parse_args()
+
+
+def audit_manifest_progress(manifest_path: str, output_dir: str) -> dict:
+    """Audit all 84 official runs against output directory."""
+    with open(manifest_path, "r") as f:
+        manifest = json.load(f)
+
+    runs = manifest["runs"]
+    total = len(runs)
+    completed = []
+    failed = []
+    missing = []
+
+    for r in runs:
+        exp_id = r["experiment_id"]
+        res_file = os.path.join(output_dir, f"{exp_id}.json")
+        if os.path.exists(res_file):
+            try:
+                with open(res_file, "r") as f:
+                    data = json.load(f)
+                if validate_provenance_record(data):
+                    completed.append(exp_id)
+                else:
+                    failed.append(exp_id)
+            except Exception:
+                failed.append(exp_id)
+        else:
+            missing.append(exp_id)
+
+    return {
+        "total_manifest_runs": total,
+        "completed_runs": len(completed),
+        "failed_runs": len(failed),
+        "missing_runs": len(missing),
+        "completed_ids": completed,
+        "failed_ids": failed,
+        "missing_ids": missing,
+    }
+
+
+def main():
+    args = parse_args()
+    manifest_path = os.path.abspath(args.manifest)
+    data_dir = os.path.abspath(args.data_dir)
+    output_dir = os.path.abspath(args.output_dir)
+
+    if not os.path.exists(manifest_path):
+        print(f"Error: Manifest not found at {manifest_path}")
+        sys.exit(1)
+
+    if args.validate_manifest:
+        audit = audit_manifest_progress(manifest_path, output_dir)
+        print("=" * 70)
+        print("PILOT BENCHMARK PROGRESS AUDIT")
+        print("=" * 70)
+        print(f"Total Official Manifest Runs : {audit['total_manifest_runs']}")
+        print(f"Completed Valid Runs         : {audit['completed_runs']}")
+        print(f"Failed / Corrupted Runs      : {audit['failed_runs']}")
+        print(f"Pending / Missing Runs       : {audit['missing_runs']}")
+        print("=" * 70)
+        if audit["completed_runs"] == audit["total_manifest_runs"]:
+            print("ALL 84 OFFICIAL RUNS COMPLETED AND VALIDATED.")
+        else:
+            pct = (audit["completed_runs"] / audit["total_manifest_runs"]) * 100.0
+            print(f"Progress: {pct:.1f}% complete ({audit['missing_runs']} remaining).")
+        return
+
+    with open(manifest_path, "r") as f:
+        manifest = json.load(f)
+
+    all_runs = manifest["runs"]
+    selected_runs = []
+
+    if args.run_id:
+        selected_runs = [r for r in all_runs if r["experiment_id"] == args.run_id]
+        if not selected_runs:
+            print(f"Error: run-id '{args.run_id}' not found in manifest.")
+            sys.exit(1)
+    elif args.run_ids:
+        target_ids = set([s.strip() for s in args.run_ids.split(",") if s.strip()])
+        selected_runs = [r for r in all_runs if r["experiment_id"] in target_ids]
+    elif args.batch_index is not None and args.num_batches is not None:
+        if not (0 <= args.batch_index < args.num_batches):
+            print(f"Error: batch-index must be in [0, {args.num_batches-1}]")
+            sys.exit(1)
+        chunk_size = int(np.ceil(len(all_runs) / args.num_batches))
+        start_idx = args.batch_index * chunk_size
+        end_idx = min(start_idx + chunk_size, len(all_runs))
+        selected_runs = all_runs[start_idx:end_idx]
+        print(f"Executing Batch Chunk {args.batch_index+1}/{args.num_batches} (Runs {start_idx} to {end_idx-1}, Total: {len(selected_runs)})")
+    else:
+        selected_runs = all_runs
+
+    if args.limit:
+        selected_runs = selected_runs[:args.limit]
+
+    print(f"Selected {len(selected_runs)} runs out of {len(all_runs)} manifest runs.")
+
+    # Load CIFAR-10 datasets
+    print("Loading datasets from data directory...")
+    cifar_train = datasets.CIFAR10(root=data_dir, train=True, download=False)
+    cifar_test = datasets.CIFAR10(root=data_dir, train=False, download=False)
+
+    total_runs = len(selected_runs)
+    for idx, r in enumerate(selected_runs, 1):
+        exp_id = r["experiment_id"]
+        if not args.force and check_run_already_completed(output_dir, exp_id):
+            print(f"[{idx}/{total_runs}] Skipping already completed run: {exp_id}")
+            continue
+
+        print(f"\n[{idx}/{total_runs}] Starting run: {exp_id}")
+        print(f"  - Noise: {r['noise_regime']} ({r.get('noise_rate', 0.0)}) | Track: {r['track']} | Seed: {r['seed']}")
+        t0 = time.time()
+        res = run_single_experiment(
+            experiment_id=exp_id,
+            cifar_train=cifar_train,
+            cifar_test=cifar_test,
+            noise_regime=r["noise_regime"],
+            model_name=r["model"],
+            track_name=r["track"],
+            seed=r["seed"],
+            output_dir=output_dir,
+            epochs=r.get("epochs", 30),
+            batch_size=r.get("batch_size", 128),
+            lr=r.get("lr", 0.05),
+            device_str=args.device,
+            force=args.force,
+        )
+        dt = time.time() - t0
+        print(f"  -> Finished {exp_id} in {dt:.1f}s with status: {res.get('status')}")
+
+
+if __name__ == "__main__":
+    main()
