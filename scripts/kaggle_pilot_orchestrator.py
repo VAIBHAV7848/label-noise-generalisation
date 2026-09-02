@@ -120,17 +120,17 @@ def push_kernel(batch_idx: int) -> bool:
 
 def get_kernel_status(kernel_id: str) -> str:
     """Get the current execution status of a Kaggle kernel."""
-    res = subprocess.run(["python3", "-m", "kaggle", "kernels", "status", kernel_id], capture_output=True, text=True)
-    if res.returncode == 0:
-        out = res.stdout.strip()
-        if "COMPLETE" in out:
-            return "COMPLETE"
-        elif "RUNNING" in out or "QUEUED" in out:
-            return "RUNNING"
-        elif "ERROR" in out or "FAILED" in out:
-            return "ERROR"
-        else:
-            return out
+    for attempt in range(3):
+        res = subprocess.run(["python3", "-m", "kaggle", "kernels", "status", kernel_id], capture_output=True, text=True)
+        if res.returncode == 0:
+            out = res.stdout.strip().upper()
+            if "COMPLETE" in out:
+                return "COMPLETE"
+            elif "RUNNING" in out or "QUEUED" in out:
+                return "RUNNING"
+            elif "ERROR" in out or "FAILED" in out or "CANCELLED" in out:
+                return "ERROR"
+        time.sleep(2)
     return "UNKNOWN"
 
 
@@ -225,19 +225,6 @@ def main():
         if completed_count == NUM_BATCHES:
             break
 
-        # Check running kernels
-        active_running = sum(1 for s in batch_status.values() if s == "RUNNING")
-
-        # Launch pending kernels if below capacity
-        for b in range(NUM_BATCHES):
-            if batch_status[b] == "PENDING" and active_running < MAX_CONCURRENT_GPU:
-                print(f"Queue slot available. Launching Batch {b}...")
-                success = push_kernel(b)
-                if success:
-                    batch_status[b] = "RUNNING"
-                    active_running += 1
-                    time.sleep(5)
-
         # Poll running kernels
         for b in range(NUM_BATCHES):
             if batch_status[b] == "RUNNING":
@@ -248,10 +235,23 @@ def main():
                     if success:
                         batch_status[b] = "COMPLETED"
                     else:
-                        print(f"Failed to synchronize results for Batch {b}. Retrying...")
+                        print(f"Failed to synchronize results for Batch {b}. Will retry download...")
                 elif st == "ERROR":
                     print(f"\n[EVENT] Batch {b} encountered an infrastructure error. Re-queueing...")
                     batch_status[b] = "PENDING"
+
+        # Check active running kernels
+        active_running = sum(1 for s in batch_status.values() if s == "RUNNING")
+
+        # Launch pending kernels if below capacity
+        for b in range(NUM_BATCHES):
+            if batch_status[b] == "PENDING" and active_running < MAX_CONCURRENT_GPU:
+                print(f"\nQueue slot available. Launching Batch {b} ({kernel_ids[b]})...")
+                success = push_kernel(b)
+                if success:
+                    batch_status[b] = "RUNNING"
+                    active_running += 1
+                    time.sleep(5)
 
         # Monitoring Progress Report
         done_runs, total_runs = count_completed_manifest_runs()
