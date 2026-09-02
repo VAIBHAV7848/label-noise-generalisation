@@ -1,27 +1,28 @@
-# Pilot Kill & Pivot Criteria (Phase 2)
+# Pilot Kill & Diagnostic Failure Criteria (Phase 2)
 
-This document establishes the explicit, non-negotiable quantitative criteria that dictate whether the pilot experiment fails, requires an architectural pivot, or permits proceeding to the full 300-run MDES benchmark.
+**Document Type**: Pre-Registered Failure Criteria & Methodological Standards  
+**Framework**: Academic Research Skills (ARS) Falsification Standards  
+**Single Source of Truth**: [`VAIBHAV7848/label-noise-generalisation`](https://github.com/VAIBHAV7848/label-noise-generalisation)
 
 ---
 
-## 1. Non-Negotiable Kill & Pivot Triggers
+## 1. Revised Non-Negotiable Kill & Diagnostic Triggers
 
-| Trigger ID | Failure Condition | Target Hypothesis / Proposition | Action & Pivot Protocol |
+| Trigger ID | Diagnostic Failure Condition | Target Scope | Action & Scientific Protocol |
 | :--- | :--- | :--- | :--- |
-| **KILL-01** | **Ground-Truth Inversion Collapse**: Forward or Backward Loss Correction with **known true $T$** fails to outperform standard Cross-Entropy by at least $5.0\%$ top-1 test accuracy under heavy symmetric noise ($\eta=0.5$). | Proposition 1 & Loss Correction Pipeline | **HALT EXECUTION IMMEDIATELY**. Indicates mathematical implementation bug or catastrophic gradient failure in `src/losses/loss_correction.py`. |
-| **KILL-02** | **Monotonicity Violation of Excess Risk**: Deliberately corrupted matrix $\hat{T}_{\text{bad}}$ ($\epsilon \approx 0.40$) achieves equal or better test accuracy than known true $T$ ($\epsilon = 0.0$) across all 3 seeds under identical training conditions. | Proposition 2 ($\mathcal{E}(\hat{f}) \propto \epsilon$) | **PIVOT THEORY**. The empirical risk does not track theoretical matrix perturbation bounds; theoretical bound is invalidated as an empirical predictive tool. |
-| **KILL-03** | **Numerical NaN / Gradient Explosion**: Backward Loss Correction produces `NaN` loss or gradient overflow during training under non-singular transition matrices ($\kappa(T) \le 10.0$). | Numerical Stability & SGD Dynamics | **FIX ARCHITECTURE**. Enforce gradient norm clipping ($\|\mathbf{g}\|_2 \le 5.0$) or replace explicit matrix inversion with iterative linear solve. |
-| **KILL-04** | **Calibration Invariance**: Post-hoc Temperature Scaling tuned on corrupted validation sets achieves identical test ECE ($|\Delta \text{ECE}_{\text{val}}| \le 0.005$) to Temperature Scaling tuned on clean validation sets across all noise regimes. | Hypothesis H3 & Research Gap 2 | **PIVOT RESEARCH SCOPE**. If validation corruption has zero effect on post-hoc calibration recovery, drop corrupted-validation calibration as a core contribution and focus exclusively on robust loss optimization. |
-| **KILL-05** | **Estimator Degeneracy**: Both Anchor-Point and Confident Learning estimators produce transition matrices with Frobenius error $\|\hat{T} - T\|_F > 0.60$ under moderate noise ($\eta = 0.2$), performing worse than random uniform guessing. | Identifiability Assumptions | **REPLACE ESTIMATORS**. Retrain warm-up feature extractors with contrastive learning before estimating $T$. |
+| **KILL-01** | **Loss Pipeline & Numerical Integrity**: Forward or Backward Loss Correction produces `NaN`, `Inf`, or diverging negative loss under known true $T$, or the Monte Carlo empirical mean of the corrected loss deviates from the clean expectation on synthetic verification batches. | Loss Correction Pipeline & Implementation Integrity | **HALT EXECUTION IMMEDIATELY**. Indicates catastrophic gradient explosion or algebraic index bug in loss correction implementation. |
+| **KILL-02** | **Perturbation Sensitivity Collapse**: Deliberately corrupted matrix $\hat{T}_{\text{bad}} = 0.5 T + 0.5 \mathbf{U}$ ($\epsilon \approx 0.40$) systematically and statistically significantly outperforms the true matrix $T$ ($\epsilon = 0.0$) across all 3 seeds under identical training conditions. | Proposition 2 Empirical Sensitivity Check | **PIVOT MODEL / LOSS ANALYSIS**. Indicates that the model's loss landscape is insensitive to transition matrix geometry; investigate loss regularization. |
+| **KILL-03** | **Numerical Instability / Divergence**: Model training produces `NaN` losses, infinite gradients, or numerical overflow during SGD optimization under non-singular transition matrices ($\kappa(T) \le 10.0$). | Optimization & Gradient Dynamics | **FIX OPTIMIZATION ARCHITECTURE**. Enforce gradient norm clipping ($\|\mathbf{g}\|_2 \le 5.0$) or adjust initial learning rate schedule. |
+| **KILL-04** | **Validation Calibration Invariance**: Post-hoc Temperature Scaling tuned on corrupted validation sets achieves identical test ECE to Temperature Scaling tuned on clean validation sets across all noise regimes including $\eta=0.5$ and $\eta=0.4$ Asymmetric. | Hypothesis H3 & Research Gap 2 | **DOCUMENT EMPIRICAL INVARIANCE**. If validation corruption produces zero measurable calibration transfer penalty on CIFAR-10, report this finding and pivot focus to in-training loss calibration dynamics (GCE/SCE). |
+| **KILL-05** | **Estimator Degeneracy**: Estimator produces a near-singular transition matrix ($\kappa(\hat{T}) > 10^4$) or Frobenius error $\|\hat{T} - T\|_F > 0.60$ under moderate noise ($\eta = 0.2$), performing worse than random uniform guessing. | Identifiability & Estimator Health | **DIAGNOSE ESTIMATOR**. Review warm-up feature representations and adjust cross-validation fold epochs or margin thresholds. |
 
 ---
 
-## 2. Gate Passage Thresholds (Proceeding to MDES)
+## 2. Gate Passage Diagnostic Objectives (Pre-Phase 3 Review)
 
-To achieve a green light for Phase 3 (300-run MDES benchmark), the pilot **MUST** satisfy ALL of the following criteria across the 3 pilot seeds:
+Before proposing progression to Phase 3 (300-run MDES benchmark), the pilot data must be reviewed against these diagnostic benchmarks:
 
-1. $\text{Acc}(\text{Forward}_{\text{known } T}) - \text{Acc}(\text{CE}) \ge +5.0\%$ on CIFAR-10 Symmetric $\eta=0.5$.
-2. $\text{Acc}(\text{Forward}_{\text{known } T}) > \text{Acc}(\text{Forward}_{\hat{T}_{\text{estimated}}}) > \text{Acc}(\text{Forward}_{\hat{T}_{\text{bad}}})$.
-3. $\|\hat{T}_{\text{anchor}} - T\|_F < 0.20$ and $\|\hat{T}_{\text{CL}} - T\|_F < 0.20$ on CIFAR-10 Symmetric $\eta=0.2$.
-4. $\Delta \text{ECE}_{\text{val}} = \text{ECE}(\text{TS}_{\text{corrupted}}) - \text{ECE}(\text{TS}_{\text{clean}}) \ge +0.02$ on CIFAR-10 Asymmetric $\eta=0.4$ (demonstrating statistical measurability of validation corruption).
-5. Zero unhandled runtime exceptions, zero NaN losses, and 100% experiment provenance logging.
+1. **Numerical Sanity**: Zero `NaN` or `Inf` loss values, bounded risk, and 100% complete provenance JSON logs across all 84 runs.
+2. **Perturbation Sensitivity**: Known True $T$ achieves higher test accuracy than the deliberately degraded $\hat{T}_{\text{bad}}$ control across seeds.
+3. **Estimator Stability**: Both Anchor-Point and Confident Learning estimators produce non-singular matrices ($\kappa(\hat{T}) \le 10^4$) with Frobenius error $\|\hat{T} - T\|_F < 0.40$ on CIFAR-10 Symmetric $\eta=0.2$.
+4. **Calibration Transfer Sensitivity**: $\Delta \text{ECE}_{\text{val}} = \text{ECE}(\text{TS}_{\text{corrupted}}) - \text{ECE}(\text{TS}_{\text{clean}})$ is empirically measured across all regimes to quantify the post-hoc calibration degradation.
