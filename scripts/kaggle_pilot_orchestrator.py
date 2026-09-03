@@ -14,12 +14,15 @@ import tarfile
 import subprocess
 import numpy as np
 
+BASE_DIR = os.path.abspath(".")
+if BASE_DIR not in sys.path:
+    sys.path.insert(0, BASE_DIR)
+
 from src.training.run_pilot import validate_provenance_record
 
 USERNAME = "vaibhavchavanpatil"
 NUM_BATCHES = 4
 MAX_CONCURRENT_GPU = 2
-BASE_DIR = os.path.abspath(".")
 KERNELS_DIR = os.path.join(BASE_DIR, "kaggle_kernels")
 OUTPUT_DIR = os.path.join(BASE_DIR, "05_RESULTS", "pilot")
 MANIFEST_PATH = os.path.join(BASE_DIR, "04_EXPERIMENTS", "pilot_run_manifest.json")
