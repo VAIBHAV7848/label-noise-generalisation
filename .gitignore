@@ -73,6 +73,7 @@ data/raw/
 kaggle_kernels/
 kaggle_runner/
 kaggle_debug*/
+kaggle(output)/
 kaggle.json
 mobile_app/build/
 *.tmp
