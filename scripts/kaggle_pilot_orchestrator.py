@@ -32,7 +32,7 @@ from src.training.run_pilot import validate_provenance_record
 
 USERNAME = "vaibhavchavanpatil"
 NUM_BATCHES = 4
-MAX_CONCURRENT_GPU = 2
+MAX_CONCURRENT_GPU = 1
 KERNELS_DIR = os.path.join(BASE_DIR, "kaggle_kernels")
 OUTPUT_DIR = os.path.join(BASE_DIR, "05_RESULTS", "pilot")
 MANIFEST_PATH = os.path.join(BASE_DIR, "04_EXPERIMENTS", "pilot_run_manifest.json")
