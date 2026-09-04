@@ -10,9 +10,18 @@ import sys
 import json
 import time
 import shutil
+import socket
 import tarfile
 import subprocess
 import numpy as np
+
+# Force IPv4 resolution to prevent timeouts on broken IPv6/NAT64 routes
+_orig_getaddrinfo = socket.getaddrinfo
+def _ipv4_getaddrinfo(host, port, family=0, *args, **kwargs):
+    if family == 0 or family == socket.AF_UNSPEC:
+        family = socket.AF_INET
+    return _orig_getaddrinfo(host, port, family, *args, **kwargs)
+socket.getaddrinfo = _ipv4_getaddrinfo
 
 BASE_DIR = os.path.abspath(".")
 if BASE_DIR not in sys.path:
@@ -276,6 +285,13 @@ def main():
             if k_status == "RUNNING":
                 batch_status[b] = "RUNNING"
                 print(f"Batch {b} is currently RUNNING on Kaggle ({kernel_ids[b]}).")
+            elif k_status == "COMPLETE":
+                print(f"Batch {b} is COMPLETE on Kaggle. Downloading and extracting results...")
+                success = download_and_extract_results(kernel_ids[b], b)
+                if success:
+                    batch_status[b] = "COMPLETED"
+                else:
+                    batch_status[b] = "PENDING"
             else:
                 batch_status[b] = "PENDING"
                 print(f"Batch {b} is PENDING execution ({kernel_ids[b]}).")
