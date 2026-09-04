@@ -26,6 +26,7 @@ socket.getaddrinfo = _ipv4_getaddrinfo
 BASE_DIR = os.path.abspath(".")
 if BASE_DIR not in sys.path:
     sys.path.insert(0, BASE_DIR)
+os.environ["PYTHONPATH"] = f"{BASE_DIR}/scripts:{os.environ.get('PYTHONPATH', '')}"
 
 from src.training.run_pilot import validate_provenance_record
 
@@ -131,7 +132,7 @@ def push_kernel(batch_idx: int) -> bool:
         "python3", "-m", "kaggle", "kernels", "push",
         "-p", b_dir,
         "--accelerator", "NvidiaTeslaT4"
-    ], capture_output=True, text=True)
+    ], capture_output=True, text=True, env=os.environ)
     if res.returncode == 0:
         print(f"Pushed Batch {batch_idx} ({k_id}): {res.stdout.strip()}")
         return True
@@ -140,20 +141,33 @@ def push_kernel(batch_idx: int) -> bool:
         return False
 
 
+_kaggle_api = None
+def get_kaggle_api():
+    global _kaggle_api
+    if _kaggle_api is None:
+        from kaggle.api.kaggle_api_extended import KaggleApi
+        _kaggle_api = KaggleApi()
+        _kaggle_api.authenticate()
+    return _kaggle_api
+
+
 def get_kernel_status(kernel_id: str) -> str:
-    """Get the current execution status of a Kaggle kernel."""
-    for attempt in range(3):
-        res = subprocess.run(["python3", "-m", "kaggle", "kernels", "status", kernel_id], capture_output=True, text=True)
-        if res.returncode == 0:
-            out = res.stdout.strip().upper()
-            if "COMPLETE" in out:
-                return "COMPLETE"
-            elif "RUNNING" in out or "QUEUED" in out:
-                return "RUNNING"
-            elif "ERROR" in out or "FAILED" in out or "CANCELLED" in out:
-                return "ERROR"
-        time.sleep(2)
-    return "UNKNOWN"
+    """Get the current execution status of a Kaggle kernel via in-process API."""
+    try:
+        api = get_kaggle_api()
+        res = api.kernels_status(kernel_id)
+        st = getattr(res, "status", None) or (res.get("status") if isinstance(res, dict) else str(res))
+        st = str(st).upper()
+        if "COMPLETE" in st:
+            return "COMPLETE"
+        elif "RUNNING" in st or "QUEUED" in st:
+            return "RUNNING"
+        elif "ERROR" in st or "FAILED" in st or "CANCEL" in st:
+            return "ERROR"
+        return "UNKNOWN"
+    except Exception as e:
+        print(f"Error checking status for {kernel_id}: {e}")
+        return "UNKNOWN"
 
 
 def is_batch_completed(batch_idx: int) -> bool:
@@ -186,20 +200,41 @@ def is_batch_completed(batch_idx: int) -> bool:
 
 
 def download_and_extract_results(kernel_id: str, batch_idx: int) -> bool:
-    """Download output archive, extract JSON results and checkpoints, and validate."""
+    """Download output archive via direct signed URL, extract JSON results and checkpoints, and validate."""
     download_dir = os.path.join(KERNELS_DIR, f"output_batch_{batch_idx}")
     os.makedirs(download_dir, exist_ok=True)
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     checkpoints_dir = os.path.join(OUTPUT_DIR, "checkpoints")
     os.makedirs(checkpoints_dir, exist_ok=True)
 
-    print(f"Downloading outputs for {kernel_id}...")
-    res = subprocess.run(["python3", "-m", "kaggle", "kernels", "output", kernel_id, "-p", download_dir], capture_output=True, text=True)
-    if res.returncode != 0:
-        print(f"Failed to download output for {kernel_id}: {res.stderr.strip()}")
-        return False
-
     archive_path = os.path.join(download_dir, f"pilot_results_batch_{batch_idx}.tar.gz")
+
+    print(f"Downloading outputs for {kernel_id}...")
+    import requests
+    with open(os.path.expanduser("~/.kaggle/kaggle.json")) as f:
+        creds = json.load(f)
+    auth = (creds["username"], creds["key"])
+    url = f"https://www.kaggle.com/api/v1/kernels/output/download/{kernel_id}/pilot_results_batch_{batch_idx}.tar.gz"
+
+    download_ok = False
+    try:
+        r = requests.get(url, auth=auth, allow_redirects=True, stream=True, timeout=30)
+        if r.status_code == 200:
+            with open(archive_path, "wb") as f:
+                for chunk in r.iter_content(chunk_size=1024 * 1024):
+                    if chunk:
+                        f.write(chunk)
+            download_ok = True
+    except Exception as e:
+        print(f"Direct download failed: {e}")
+
+    if not download_ok:
+        print("Falling back to kaggle CLI output download...")
+        res = subprocess.run(["python3", "-m", "kaggle", "kernels", "output", kernel_id, "-p", download_dir], capture_output=True, text=True, env=os.environ)
+        if res.returncode != 0:
+            print(f"Failed to download output for {kernel_id}: {res.stderr.strip()}")
+            return False
+
     if not os.path.exists(archive_path):
         print(f"Archive {archive_path} not found in {download_dir}.")
         return False
