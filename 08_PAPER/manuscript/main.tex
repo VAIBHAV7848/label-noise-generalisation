@@ -1,0 +1,564 @@
+\documentclass[10pt,twocolumn]{article}
+
+\usepackage[margin=0.75in]{geometry}
+\usepackage{amsmath,amssymb,amsfonts,amsthm}
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage[numbers,sort&compress]{natbib}
+\usepackage{microtype}
+\usepackage{subcaption}
+\usepackage{xcolor}
+\usepackage{cleveref}
+
+% Theorem Environments
+\newtheorem{theorem}{Theorem}
+\newtheorem{proposition}{Proposition}
+\newtheorem{lemma}{Lemma}
+\newtheorem{corollary}{Corollary}
+\theoremstyle{definition}
+\newtheorem{definition}{Definition}
+\newtheorem{remark}{Remark}
+
+\title{\textbf{Excess Risk Bounds, Inversion Conditioning, and Calibration Distortion under Class-Conditional Label Noise}}
+
+\author{
+  \textbf{Research Consortium on Label Noise Generalisation} \\
+  Department of Computer Science \& Artificial Intelligence \\
+  \texttt{\{research, reproducibility\}@labelnoise-benchmarks.org}
+}
+
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+Supervised empirical risk minimization is fundamentally compromised when training labels are corrupted by class-conditional noise. While prior literature has predominantly analyzed isolated algorithmic families under test-set accuracy alone, the exact interplay between transition-matrix estimation error, matrix inversion conditioning, early memorisation dynamics, and confidence calibration remains insufficiently characterized. In this work, we present a unified theoretical and empirical investigation of learning under class-conditional label noise. Theoretically, we derive finite-sample excess risk bounds under imperfect transition matrices $\hat{T}$ under independent sample splitting ($S_T \perp S_R$), formally establishing that clean excess risk scales with both estimation error $\|\hat{T} - T\|_F$ and the operator condition number $\kappa(T)$. We contextualize the fundamental noise tolerance barrier of convex multi-class surrogates~\cite{charoenphakdee2019symmetric} and provide exact population identities for posterior vector calibration distortion. Empirically, we conduct a pre-registered 84-run exploratory benchmark on CIFAR-10 with PreActResNet-18 across four noise regimes (Clean, Symmetric 20\%, Symmetric 50\%, Asymmetric 40\%) and seven diagnostic tracks, evaluated across three random seeds ($N=3$). Our empirical findings demonstrate that: (1) exact transition matrix correction substantially mitigates asymmetric boundary displacement ($+6.19\%$ accuracy gain over cross-entropy, uncorrected $p = 0.0019$, Holm $p = 0.0442$, Cohen's $d = 13.15$), whereas symmetric robust losses (GCE) outperform matrix inversion on symmetric noise ($82.40\%$ vs $79.17\%$) by reducing finite-sample gradient variance on an invariant Bayes decision boundary; (2) transition matrix ill-conditioning ($\kappa(\hat{T}) = 34.66 \pm 3.47$ under Confident Learning in asymmetric noise) inflates expected calibration error to $0.1193$; (3) uncorrected cross-entropy suffers a $2.99\%$ clean validation memorisation decay, which is arrested by loss correction ($1.00\%$) and GCE ($0.11\%$); and (4) post-hoc Temperature Scaling tuned on corrupted validation sets creates a severe ``corrupted validation trap,'' degrading clean calibration by up to $+16.63$ percentage points in ECE. Our results provide actionable methodological guidance for reliable machine learning in corrupted environments.
+\end{abstract}
+
+\section{Introduction}
+Deep neural networks have achieved remarkable empirical success across computer vision, natural language processing, and medical diagnosis~\cite{he2016identity,zhang2017understanding}. However, their immense representational capacity enables them to easily memorize arbitrary patterns, rendering them highly sensitive to label noise in training datasets~\cite{zhang2017understanding,arpit2017closer}. In real-world applications, label noise inevitably arises from imperfect automated annotators, crowdsourcing ambiguities, and domain-expert disagreement~\cite{song2022learning,wei2022learning}.
+
+To mitigate label corruption, the machine learning literature has diverged into three distinct methodological paradigms:
+\begin{enumerate}
+    \item \textbf{Transition-Matrix-Based Loss Correction}: Methods that explicitly estimate the class-conditional noise transition matrix $T_{ij} = P(\tilde{Y}=j \mid Y=i)$ and modify the training loss via backward inversion ($T^{-1}$) or forward probability adjustment ($T^\top$) to recover unbiased clean risk estimators~\cite{natarajan2013learning,patrini2017making,xia2019are}.
+    \item \textbf{Robust Loss Functions}: Inherently symmetric or bounded surrogate losses, such as Generalized Cross-Entropy (GCE)~\cite{zhang2018generalized} and Symmetric Cross-Entropy (SCE)~\cite{wang2019symmetric}, designed to resist noise overfitting without requiring explicit transition matrix estimation.
+    \item \textbf{Sample Selection and Filtering}: Multi-network heuristics and out-of-fold confidence thresholds that identify and discard suspected corrupted instances~\cite{han2018co,li2020dividemix,northcutt2021confident}.
+\end{enumerate}
+
+Despite extensive research, existing literature exhibits three critical limitations:
+\begin{itemize}
+    \item \textbf{Matrix Conditioning Blindness}: Theoretical excess risk bounds frequently treat the transition matrix $T$ as a fixed constant, overlooking the severe variance amplification and numerical instability induced by the matrix condition number $\kappa(T) = \|T\|_2 \|T^{-1}\|_2$ under finite-sample estimation errors.
+    \item \textbf{The Corrupted Validation Trap}: Prior benchmarks predominantly report top-1 classification accuracy, neglecting confidence calibration metrics such as Expected Calibration Error (ECE)~\cite{guo2017calibration,nixon2019measuring} and Brier scores~\cite{brier1950verification}. Crucially, practitioners frequently tune post-hoc calibration methods (e.g., Temperature Scaling) on noisy validation sets, oblivious to the fact that corrupted labels distort temperature optimization.
+    \item \textbf{Capacity-Memorisation Decoupling}: While early memorisation phenomena are widely acknowledged~\cite{arpit2017closer}, the exact mechanism through which robust losses and loss corrections arrest validation degradation over time has not been quantified within an identical controlled codebase.
+\end{itemize}
+
+\subsection{Summary of Contributions}
+In this work, we bridge theory and empirical evaluation through the following contributions:
+\begin{enumerate}
+    \item \textbf{Finite-Sample Excess Risk Bounds under Matrix Misspecification}: We prove that under transition matrix estimation error $\|\hat{T} - T\|_F \le \epsilon$ with independent sample splitting $S_T \perp S_R$ (or fixed oracle operators), the clean excess risk of empirical risk minimization scales with $\|T^{-1}\|_2^2 \epsilon$ and the Rademacher complexity of the hypothesis class (Propositions 2A and 2B). We provide a rigorous four-tier loss taxonomy classifying loss applicability, and formally classify same-sample estimation as an empirical heuristic outside the sample-splitting guarantee.
+    \item \textbf{Theoretical Calibration Distortion Bounds}: We establish the exact population identity for Vector Calibration Error (VCE) under class-conditional noise ($\text{VCE}_{\tilde{\mathcal{D}}}(f) = \mathbb{E}_{\mathbf{p}}[\|(T^\top - I)\mathbf{p}\|_1]$, Theorem 4A), proving that label noise inherently induces confidence distortion on any clean-calibrated predictor.
+    \item \textbf{Pre-Registered 84-Run Empirical Benchmark}: We execute a strictly pre-registered 84-run benchmark on CIFAR-10 using PreActResNet-18 across four noise regimes (Clean, Symmetric 20\%, Symmetric 50\%, Asymmetric 40\%) and seven diagnostic tracks with three random seeds ($N=3$), evaluated under exploratory paired statistical testing with family-wise error rate control.
+    \item \textbf{Evaluation of Hypotheses \& the Oracle Paradox}: We evaluate pre-registered hypotheses H1--H3 and resolve sub-research questions SRQ1--SRQ3. We show that matrix inversion is uniquely valuable for asymmetric noise ($p=0.0019$), whereas GCE achieves superior test performance on symmetric noise by reducing finite-sample gradient variance. We formally re-scope real-world human noise (H4) as future work.
+    \item \textbf{Discovery of the Corrupted Validation Trap}: We empirically demonstrate that fitting post-hoc Temperature Scaling on corrupted validation sets degrades clean test ECE by up to $+16.63$ percentage points, whereas in-training robust losses (GCE) preserve intrinsic calibration without validation dependence.
+\end{enumerate}
+
+\section{Related Work}
+
+\subsection{Theoretical Foundations of Label Noise}
+The theoretical study of learning from noisy labels dates back to the statistical query and PAC-learning models of Angluin and Laird~\cite{angluin1988learning} and Kearns~\cite{kearns1998efficient}. Long and Servedio~\cite{long2010random} proved that any convex surrogate loss is vulnerable to random classification noise in the worst case. Natarajan et al.~\cite{natarajan2013learning} extended this framework to binary classification with class-conditional noise by introducing unbiased surrogate losses. Van Rooyen et al.~\cite{van2015learning} and Charoenphakdee et al.~\cite{charoenphakdee2019symmetric} proved that for multi-class classification ($K \ge 3$), no strictly convex surrogate loss can be both classification-calibrated and noise-tolerant, establishing a fundamental barrier between convexity and noise robustness.
+
+\subsection{Transition Matrix Estimation and Loss Correction}
+To circumvent the convex loss barrier, Patrini et al.~\cite{patrini2017making} proposed forward and backward loss corrections utilizing an estimated noise transition matrix $T$. Their approach relies on the existence of ``anchor points'' (instances belonging to a given class with probability 1). Xia et al.~\cite{xia2019are} relaxed the anchor point assumption through T-revision. Northcutt et al.~\cite{northcutt2021confident} introduced Confident Learning, estimating $T$ via out-of-fold predicted probabilities and joint distribution thresholding. However, these works focus on estimation consistency in the asymptotic limit, without formally characterizing how matrix ill-conditioning ($\kappa(T)$) amplifies finite-sample excess risk.
+
+\subsection{Robust Losses and Memorisation Dynamics}
+Alternative methods avoid matrix estimation altogether by designing loss functions that exhibit bounded gradients. Zhang and Sabuncu~\cite{zhang2018generalized} proposed Generalized Cross-Entropy (GCE), applying a Box-Cox transformation to interpolate between Mean Absolute Error (MAE) and Cross-Entropy (CE). Wang et al.~\cite{wang2019symmetric} proposed Symmetric Cross-Entropy (SCE), combining CE with Reverse Cross-Entropy (RCE). In parallel, Zhang et al.~\cite{zhang2017understanding} and Arpit et al.~\cite{arpit2017closer} demonstrated that deep networks learn clean, simple patterns before fitting noisy labels, creating a transient ``generalisation window'' where early stopping or loss correction can arrest memorisation.
+
+\subsection{Confidence Calibration under Corrupted Distributions}
+Modern neural networks are notoriously overconfident and miscalibrated~\cite{guo2017calibration}. While Temperature Scaling (TS) effectively restores calibration on independent and identically distributed (i.i.d.) clean validation data, its behavior under label noise remains understudied. Nixon et al.~\cite{nixon2019measuring} demonstrated that standard ECE is sensitive to binning artifacts, motivating Adaptive ECE (AdaECE). In this paper, we directly analyze how training label noise and corrupted validation data alter calibration reliability.
+
+\section{Problem Formulation}
+
+\subsection{Mathematical Notation}
+Let $\mathcal{X} \subset \mathbb{R}^d$ denote the input feature space and $\mathcal{Y} = \{1, 2, \dots, K\}$ denote the label space with $K \ge 2$ classes. Let $\Delta^{K-1} = \{\mathbf{p} \in \mathbb{R}_+^K : \sum_{k=1}^K p_k = 1\}$ denote the probability simplex. We assume clean training and test examples $(X, Y)$ are drawn from an underlying clean distribution $\mathcal{D}$ on $\mathcal{X} \times \mathcal{Y}$. A classifier is represented by a hypothesis $f: \mathcal{X} \to \Delta^{K-1}$, where $f_k(x) = P(\hat{Y} = k \mid X = x)$.
+
+Under class-conditional label noise (CCN), the true label $Y$ is corrupted into an observed noisy label $\tilde{Y} \in \mathcal{Y}$ according to a transition probability that depends strictly on the true class $Y$:
+\begin{equation}
+T_{ij} \triangleq P(\tilde{Y} = j \mid Y = i), \quad \forall i, j \in \{1, \dots, K\}.
+\end{equation}
+The matrix $T \in [0, 1]^{K \times K}$ is row-stochastic, satisfying $\sum_{j=1}^K T_{ij} = 1$ for all $i \in \{1, \dots, K\}$. We denote the corrupted joint data distribution by $\tilde{\mathcal{D}}$.
+
+\subsection{Risk Definitions and Decision Boundaries}
+Let $\ell: \Delta^{K-1} \times \mathcal{Y} \to \mathbb{R}_+$ be a surrogate loss function. We define the vector of losses for all $K$ classes as $\vec{\ell}(f(x)) = [\ell(f(x), 1), \dots, \ell(f(x), K)]^\top \in \mathbb{R}_+^K$. The true clean expected risk and corrupted expected risk are defined respectively as:
+\begin{align}
+R_{\mathcal{D}}(f) &\triangleq \mathbb{E}_{(X, Y) \sim \mathcal{D}} [\ell(f(X), Y)], \\
+R_{\tilde{\mathcal{D}}}(f) &\triangleq \mathbb{E}_{(X, \tilde{Y}) \sim \tilde{\mathcal{D}}} [\ell(f(X), \tilde{Y})].
+\end{align}
+Given an observed training sample $S = \{(x_i, \tilde{y}_i)\}_{i=1}^n \overset{\text{i.i.d.}}{\sim} \tilde{\mathcal{D}}$, empirical risk minimization seeks $\hat{f} = \arg\min_{f \in \mathcal{F}} \hat{R}_S(f)$, where $\hat{R}_S(f) = \frac{1}{n} \sum_{i=1}^n \ell(f(x_i), \tilde{y}_i)$.
+
+\section{Theoretical Analysis}
+
+\subsection{Unbiased Loss Correction}
+When the transition matrix $T$ is known and non-singular ($\det(T) \ne 0$), unbiased risk minimization can be achieved through backward loss correction~\cite{natarajan2013learning,patrini2017making}:
+
+\begin{proposition}[Risk Unbiasedness under Invertible $T$]
+\label{prop:unbiasedness}
+Let $T \in [0, 1]^{K \times K}$ be an invertible row-stochastic transition matrix. Define the backward corrected loss vector $\vec{\tilde{\ell}}(f(x)) \triangleq T^{-1} \vec{\ell}(f(x))$. Then for any measurable hypothesis $f: \mathcal{X} \to \Delta^{K-1}$ and any base loss $\ell$ with finite expectation:
+\begin{equation}
+\mathbb{E}_{(X, \tilde{Y}) \sim \tilde{\mathcal{D}}} [\tilde{\ell}(f(X), \tilde{Y})] = \mathbb{E}_{(X, Y) \sim \mathcal{D}} [\ell(f(X), Y)].
+\end{equation}
+\end{proposition}
+
+\begin{remark}[Negative Per-Sample Losses]
+Because $T^{-1}$ inevitably possesses negative off-diagonal entries for any non-trivial noise ($T \ne I$), individual sample evaluations $\tilde{\ell}(f(x_i), \tilde{y}_i)$ can be negative. However, the expectation conditioned on $x$ remains non-negative: $\mathbb{E}_{\tilde{Y} \mid x}[\tilde{\ell}] = \mathbf{p}(x)^\top \vec{\ell}(f(x)) \ge 0$. In contrast, Forward Loss Correction modifies predictions via $T^\top f(x)$, evaluating $\hat{\ell}_{\text{forward}}(f(x), \tilde{y}) = -\log([T^\top f(x)]_{\tilde{y}}) \ge 0$, which is strictly non-negative for every sample.
+\end{remark}
+
+\subsection{Finite-Sample Excess Risk Bounds under Imperfect Inversion}
+In practice, the true matrix $T$ is unknown and must be estimated as $\hat{T}$. We analyze how estimation error $E = \hat{T} - T$ and condition number $\kappa(T)$ bound downstream excess risk.
+
+\begin{proposition}[Pointwise Risk Estimation Bias]
+\label{prop:bias}
+Let $T$ be an invertible transition matrix, and let $\hat{T}$ satisfy $\|E\|_F = \|\hat{T} - T\|_F \le \epsilon < \frac{1}{\|T^{-1}\|_2}$. Assume the base loss is $M$-bounded ($0 \le \ell \le M$). Then for any $f$:
+\begin{equation}
+\left| \mathbb{E}_{\tilde{\mathcal{D}}} [\hat{T}^{-1} \vec{\ell}(f(X))]_{\tilde{Y}} - R_{\mathcal{D}}(f) \right| \le \frac{\sqrt{K} M \|T^{-1}\|_2^2 \epsilon}{1 - \|T^{-1}\|_2 \epsilon}.
+\end{equation}
+\end{proposition}
+
+\begin{proof}[Proof Sketch]
+By Neumann series expansion, $(\hat{T})^{-1} = (T + E)^{-1} = T^{-1} (I + E T^{-1})^{-1} = T^{-1} \sum_{k=0}^\infty (-E T^{-1})^k$. Thus, $\|\hat{T}^{-1} - T^{-1}\|_2 \le \frac{\|T^{-1}\|_2^2 \|E\|_2}{1 - \|T^{-1}\|_2 \|E\|_2}$. Expanding the risk difference under total expectation and applying Cauchy-Schwarz yields the stated bound. (Full proof in Appendix~A).
+\end{proof}
+
+\begin{proposition}[Finite-Sample Clean Excess Risk Bound under Independent Estimation]
+\label{prop:excess_risk}
+Assume the base surrogate loss $\ell$ is $M$-bounded ($0 \le \ell \le M$) and $L_{\ell, 2}$-Lipschitz with respect to the $\ell_2$ norm on $\Delta^{K-1}$. Let $\hat{T}$ be a fixed deterministic matrix (such as the true matrix $T$ or a fixed perturbation) or an empirical estimator computed from an independent training split $S_T$ such that $S_T \perp S_R$ and $\|\hat{T} - T\|_F \le \epsilon < \frac{1}{\|T^{-1}\|_2}$. Let $\hat{f} = \arg\min_{f \in \mathcal{F}} \hat{R}_{S_R, \hat{T}}(f)$ be the empirical risk minimizer over an independent noisy sample $S_R$ of size $n_R$. Then with probability at least $1 - \delta$ over $S_R$:
+\begin{multline}
+\mathcal{E}(\hat{f}) \triangleq R_{\mathcal{D}}(\hat{f}) - \min_{f \in \mathcal{F}} R_{\mathcal{D}}(f) \le \frac{2 \sqrt{K} M \|T^{-1}\|_2^2 \epsilon}{1 - \|T^{-1}\|_2 \epsilon} \\
++ 4 \sqrt{2} L_{\ell, 2} \|\hat{T}^{-1}\|_2 \mathcal{R}_{n_R}(\mathcal{F}) + 2 \sqrt{K} M \|\hat{T}^{-1}\|_2 \sqrt{\frac{\ln(2/\delta)}{2n_R}},
+\end{multline}
+where $\mathcal{R}_{n_R}(\mathcal{F})$ denotes the empirical Rademacher complexity of $\mathcal{F}$.
+\end{proposition}
+
+\subsection{Loss Taxonomy and Applicability Scope}
+To ensure complete mathematical integrity, we audit the conditions of Proposition~\ref{prop:excess_risk} across all benchmarked loss functions:
+\begin{itemize}
+    \item \textbf{Category A (Directly Applicable)}: Mean Absolute Error (MAE; $M=2, L_{\ell, 2}=2$) and Forward Correction under dense transition matrices with non-zero minimum entry $T_{\min} > 0$ ($M = -\log T_{\min}, L_{\ell, 2} \le 1/T_{\min}$).
+    \item \textbf{Category B (Empirical Baselines)}: Standard unclipped Categorical Cross-Entropy (CE), which is unbounded on the open simplex ($M \to \infty$) and evaluated empirically.
+    \item \textbf{Category C (Applicable under Numerical Clamping)}: Forward Correction under sparse noise ($T_{\min} = 0$, e.g., pair-flip) and Generalized Cross-Entropy (GCE; $q=0.7$), which become $M$-bounded and Lipschitz only when bounded by an implementation probability clamp $p \ge \epsilon_{\text{clamp}} = 10^{-7}$.
+\end{itemize}
+
+\begin{remark}[Same-Sample Estimation as Empirical Heuristics]
+\label{rem:same_sample}
+Proposition~\ref{prop:excess_risk} strictly requires the sample-splitting assumption $S_T \perp S_R$ (or a fixed oracle operator). When $\hat{T} = \hat{T}(S)$ is estimated from the identical sample used for empirical risk minimization without sample splitting, perturbing a single sample point perturbs $\hat{T}(S)$ and shifts every loss term in the empirical sum, violating standard single-coordinate McDiarmid concentration. Practical algorithms such as standard Confident Learning~\cite{northcutt2021confident} and Anchor Point estimation~\cite{patrini2017making} commonly reuse the training sample ($S_T = S_R$) via cross-validation or warm-up networks. We therefore formally classify same-sample Anchor and Confident Learning as \textbf{empirical heuristics outside the strict sample-splitting coverage of Proposition~\ref{prop:excess_risk}}. In our empirical evaluation, Forward (True $T$) and Forward (Perturbed $T$) serve as the rigorous fixed-operator baselines for Proposition~\ref{prop:excess_risk}.
+\end{remark}
+
+\subsection{Theoretical vs. Finite-Sample Generalization: The \texorpdfstring{True-$T$}{True-T} Oracle vs. Robust Losses (GCE) Paradox}
+\label{sec:true_t_vs_gce_theory}
+An apparent paradox in empirical benchmarks is that under Symmetric 50\% noise, bounded robust losses (GCE) outperform the unbiased True-$T$ Forward Correction oracle ($82.40\%$ vs $79.17\%$). This observation does not contradict Proposition~\ref{prop:unbiasedness} or Proposition~\ref{prop:excess_risk}, but reflects fundamental differences between asymptotic population unbiasedness and finite-sample stochastic optimization:
+\begin{enumerate}
+    \item \textbf{Population Unbiasedness vs. Stochastic Gradient Variance}: Proposition~\ref{prop:unbiasedness} establishes that forward-corrected loss is population-consistent ($\mathbb{E}_{\tilde{\mathcal{D}}}[\tilde{\ell}] = R_{\mathcal{D}}(f)$). However, population unbiasedness is an asymptotic expectation over infinite data. In an overparameterized deep network trained with SGD on finite mini-batches, generalization is governed by the effective gradient signal-to-noise ratio. Under 50\% noise, half of every mini-batch consists of false labels. Because Forward Correction evaluates $-\log([T^\top f(x)]_{\tilde{y}})$, corrupted examples retain substantial gradient magnitude, driving parameter variance throughout training.
+    \item \textbf{Dynamic Noise Trimming in Bounded Losses}: In contrast, Generalized Cross-Entropy ($\ell_q(p, y) = \frac{1 - p_y^q}{q}$, $q=0.7$) has gradient magnitude $|\nabla_z \ell_q| \propto p_y^q (1 - p_y)$. As deep networks learn clean, simple patterns early in training~\cite{arpit2017closer}, corrupted labels receive low model probabilities ($p_{\tilde{y}} \to 0$). The factor $p_{\tilde{y}}^{0.7}$ dynamically attenuates the gradient on mislabeled examples toward zero. GCE acts as an implicit, continuous noise trimmer, dramatically reducing stochastic gradient variance on the clean data manifold.
+    \item \textbf{Invariance of the Bayes Decision Boundary}: Under symmetric label noise and balanced class priors, the corrupted conditional posterior satisfies $\arg\max_k [T^\top \mathbf{p}(x)]_k = \arg\max_k \mathbf{p}(x)$. The Bayes-optimal decision boundary is completely unchanged by symmetric noise. Consequently, directional matrix inversion is mathematically superfluous on symmetric noise; variance reduction (achieved by GCE) dominates.
+    \item \textbf{Asymmetric Regimes Require Inversion}: Under asymmetric noise (e.g., 40\% pair-flip), $T \ne T^\top$ and the Bayes boundary is severely displaced. Bounded robust losses cannot invert this directional shift and memorize the corrupted boundary (GCE drops to $78.73\%$, $-2.88\%$ vs CE). Here, exact matrix inversion is strictly necessary, enabling Forward True $T$ to recover accuracy to $87.80\%$ ($+6.19\%$ over CE).
+    \item \textbf{Regularization Corroboration via Perturbed $T$}: This mechanism is confirmed by `Forward (Perturbed $T$)' ($T_{\text{perturbed}} = 0.5 T + 0.5 \mathbf{U}$), which achieves $82.00\%$ on Symmetric 50\%, matching GCE and surpassing unregularized True $T$ ($79.17\%$). Mixing with the uniform matrix $\mathbf{U}$ injects label smoothing, regularizing gradient variance and proving that finite-sample regularization outperforms exact unbiasedness on symmetric noise.
+\end{enumerate}
+
+\subsection{The Noise Tolerance Barrier of Convex Multi-Class Surrogates}
+\begin{proposition}[Convex Multi-Class Symmetry Barrier~\cite{charoenphakdee2019symmetric}]
+\label{prop:convex_barrier}
+Let $K \ge 3$. There exists no strictly convex surrogate loss $\ell: \Delta^{K-1} \times \mathcal{Y} \to \mathbb{R}_+$ that is classification-calibrated and symmetric ($\sum_{k=1}^K \ell(\mathbf{p}, k) = C$ for all $\mathbf{p} \in \Delta^{K-1}$).
+\end{proposition}
+Proposition~\ref{prop:convex_barrier} formally justifies why non-convex robust losses (GCE) or matrix-corrected losses are mathematically mandatory for multi-class noise robustness.
+
+\subsection{Posterior Calibration Distortion under Noise}
+\begin{theorem}[Vector Calibration Error Identity under Label Noise]
+\label{thm:vce}
+Let $f: \mathcal{X} \to \Delta^{K-1}$ be perfectly calibrated on clean distribution $\mathcal{D}$, satisfying $\mathbb{E}[\mathbf{e}_Y \mid f(X) = \mathbf{p}] = \mathbf{p}$. Under class-conditional noise with transition matrix $T$, the Vector Calibration Error (VCE) on corrupted data $\tilde{\mathcal{D}}$ satisfies the exact population identity:
+\begin{equation}
+\text{VCE}_{\tilde{\mathcal{D}}}(f) \triangleq \mathbb{E}_{\mathbf{p}} \left[ \left\| \mathbb{E}[\mathbf{e}_{\tilde{Y}} \mid f(X) = \mathbf{p}] - \mathbf{p} \right\|_1 \right] = \mathbb{E}_{\mathbf{p}} \left[ \| (T^\top - I) \mathbf{p} \|_1 \right].
+\end{equation}
+\end{theorem}
+
+\begin{theorem}[Top-Label Calibration Distortion Lower Bound]
+\label{thm:top_ece}
+For symmetric noise with error rate $\eta \in [0, 1)$, where $T = (1 - \eta) I + \frac{\eta}{K - 1} (\mathbf{1}\mathbf{1}^\top - I)$, the top-label confidence calibration distortion of a clean-calibrated model satisfies:
+\begin{equation}
+\text{ECE}_{\tilde{\mathcal{D}}}(f) = \frac{\eta K}{K - 1} \mathbb{E} \left[ \max_{k} f_k(X) - \frac{1}{K} \right].
+\end{equation}
+Whenever the classifier is non-trivial ($\mathbb{E}[\max_k f_k(X)] > 1/K$), $\text{ECE}_{\tilde{\mathcal{D}}}(f) > 0$ strictly holds, proving that label noise inherently induces probability miscalibration.
+\end{theorem}
+
+\section{Experimental Methodology}
+
+\subsection{Verified Benchmark Configuration}
+All 84 experiments were executed under an identical, strictly controlled pipeline on NVIDIA Tesla T4 GPUs:
+\begin{itemize}
+    \item \textbf{Dataset}: CIFAR-10 (60,000 total images, 10 classes)~\cite{krizhevsky2009learning}.
+    \item \textbf{Partitions}: 35,000 noisy training instances, 5,000 clean validation instances, 5,000 corrupted validation instances, 5,000 held-out buffer instances, and 10,000 clean test instances.
+    \item \textbf{Model Backbone}: PreActResNet-18 (18 layers, batch size 128)~\cite{he2016identity}.
+    \item \textbf{Optimization}: SGD with momentum $0.9$, weight decay $5 \times 10^{-4}$, initial learning rate $0.05$, trained for exactly 30 epochs with Cosine Annealing schedule ($T_{\max} = 30$).
+    \item \textbf{Data Augmentation}: Standard random crop ($32 \times 32$, padding 4) and random horizontal flip ($p=0.5$).
+    \item \textbf{Random Seeds}: Three fixed seeds: $\{42, 1337, 2024\}$.
+\end{itemize}
+
+\subsection{Noise Regimes and Diagnostic Tracks}
+We investigate four noise regimes:
+\begin{enumerate}
+    \item \textbf{Clean Baseline} ($\eta = 0.0$, $T = I$).
+    \item \textbf{Symmetric 20\%} ($\eta = 0.2$, off-diagonal $T_{ij} = 0.2/9 \approx 0.0222$).
+    \item \textbf{Symmetric 50\%} ($\eta = 0.5$, off-diagonal $T_{ij} = 0.5/9 \approx 0.0556$).
+    \item \textbf{Asymmetric 40\%} ($\eta = 0.4$, pair-flip: TRUCK $\to$ AUTOMOBILE, BIRD $\to$ AIRPLANE, DEER $\to$ HORSE, CAT $\leftrightarrow$ DOG).
+\end{enumerate}
+
+Across each regime, we evaluate seven distinct tracks:
+\begin{enumerate}
+    \item \textbf{CE}: Standard Cross-Entropy baseline.
+    \item \textbf{GCE}: Generalized Cross-Entropy with $q = 0.7$~\cite{zhang2018generalized}.
+    \item \textbf{SCE}: Symmetric Cross-Entropy ($\alpha = 0.1, \beta = 1.0$)~\cite{wang2019symmetric}.
+    \item \textbf{Forward (True $T$)}: Forward Loss Correction with ground-truth transition matrix $T$~\cite{patrini2017making}.
+    \item \textbf{Forward (Anchor $T$)}: Forward correction with $\hat{T}$ estimated via 97th-percentile anchor points from a 5-epoch warm-up network~\cite{patrini2017making}.
+    \item \textbf{Forward (ConfLearning $T$)}: Forward correction with $\hat{T}$ estimated via Confident Learning with 3-fold cross-validation~\cite{northcutt2021confident}.
+    \item \textbf{Forward (Perturbed $T$)}: Diagnostic control with deliberately corrupted matrix $\hat{T} = 0.5 T + 0.5 \mathbf{U}$, where $\mathbf{U}_{ij} = 1/K$.
+\end{enumerate}
+$$\text{Total Runs} = 4 \text{ Regimes} \times 7 \text{ Tracks} \times 3 \text{ Seeds} = \mathbf{84 \text{ Runs}}.$$
+
+\subsection{Evaluation Metrics \& Statistical Testing}
+We evaluate:
+\begin{itemize}
+    \item \textbf{Generalisation}: Clean Test Top-1 and Top-5 accuracy (\%).
+    \item \textbf{Calibration}: Expected Calibration Error (ECE, 15 equal-width bins), Adaptive ECE (AdaECE, 15 equal-frequency bins), and Brier Score.
+    \item \textbf{Matrix Quality}: Frobenius estimation error $\|\hat{T} - T\|_F$, 2-norm condition number $\kappa(\hat{T}) = \|\hat{T}\|_2 \|\hat{T}^{-1}\|_2$, and spectral inverse norm $\|\hat{T}^{-1}\|_2$.
+    \item \textbf{Statistical Inference \& Sample Size Limitations}: Two-tailed paired $t$-tests paired by random seed ($N=3$, $\text{df}=2$). Due to the sample size $N=3$, all inferential tests are formally classified as \textbf{exploratory}: normality of differences cannot be formally verified, and non-parametric rank tests (e.g., Wilcoxon) are mathematically incapable of reaching $\alpha=0.05$ (minimum achievable $p=0.25$). To control family-wise error rates, multiple comparison correction is enforced across the six pairwise baseline tests within each regime using the Holm-Bonferroni step-down procedure ($\alpha=0.05$). We report sample means, standard deviations, exact unadjusted $p$-values, Holm-adjusted $p$-values, Cohen's $d$, and 95\% confidence intervals.
+\end{itemize}
+
+\section{Empirical Results}
+
+\input{tables/tab1_main_performance.tex}
+\input{tables/tab4_statistical_tests.tex}
+
+\begin{figure*}[t]
+\centering
+\includegraphics[width=0.75\textwidth]{figures/fig1_accuracy_vs_noise.pdf}
+\caption{Test Top-1 Classification Accuracy across four noise regimes on CIFAR-10 ($N=84$ runs, Mean $\pm$ SD across 3 seeds). Differences are interpreted exploratorily given $N=3$.}
+\label{fig:acc_vs_noise}
+\end{figure*}
+
+\subsection{Classification Accuracy and Degradation}
+Table~\ref{tab:main_performance} and Figure~\ref{fig:acc_vs_noise} report Top-1 Test Accuracy and degradation relative to clean baseline ($91.83\%$). Table~\ref{tab:significance} details the exploratory inferential statistical tests.
+
+\textbf{Asymmetric Noise Requires Inversion}: Under Asymmetric 40\% noise, uncorrected CE suffers severe degradation, dropping to $81.62 \pm 0.71\%$ (a $10.21\%$ drop). Forward Loss Correction with True $T$ substantially mitigates this degradation, achieving $87.80 \pm 0.25\%$. This corresponds to an observed improvement of $+6.19\%$ ($t = 22.77, p = 0.0019$, Cohen's $d = 13.15$, 95\% CI $[+5.02\%, +7.36\%]$), which survives Holm-Bonferroni correction ($p_{\text{Holm}} = 0.0442$). In stark contrast, symmetric robust loss GCE drops to $78.73 \pm 0.48\%$ (a $-2.88\%$ deficit vs CE, $t = -8.67, p = 0.0131, p_{\text{Holm}} = 0.1403$). Crucially, practical same-sample heuristic estimators fail to achieve statistically significant separation from CE at $N=3$ under Holm-Bonferroni correction: Forward Anchor $T$ achieves $83.63 \pm 2.74\%$ ($p_{\text{Holm}} = 0.6174$) and Confident Learning achieves $82.58 \pm 2.14\%$ ($p_{\text{Holm}} = 0.6174$), demonstrating that imperfect estimation under asymmetric noise yields unstable gains.
+
+\textbf{Symmetric Noise Favors Robust Regularization}: Under Symmetric 50\% noise, the ranking inverts: GCE achieves the highest test accuracy ($82.40 \pm 0.42\%$, $+7.95\%$ over CE), outperforming Forward True $T$ ($79.17 \pm 0.72\%$, $+4.72\%$ over CE, $p_{\text{Holm}} = 0.0308$). As established theoretically in Section~\ref{sec:true_t_vs_gce_theory}, symmetric noise preserves the Bayes-optimal decision boundary under balanced class priors; therefore, directional matrix inversion is unnecessary, and the dynamic sample trimming of GCE provides superior gradient variance reduction. This interpretation is directly confirmed by `Forward (Perturbed $T$)' ($T_{\text{perturbed}} = 0.5 T + 0.5 \mathbf{U}$), which achieves $82.00 \pm 0.76\%$, matching GCE and beating True $T$ ($79.17\%$) through the regularizing effect of uniform label smoothing.
+
+\textbf{Failure of Symmetric CE (SCE)}: Across all corrupted regimes, SCE exhibits severe performance collapse, falling to $51.03 \pm 3.23\%$ under Symmetric 50\% ($-23.42\%$ vs CE) and $63.14 \pm 3.74\%$ under Asymmetric 40\% ($-18.47\%$ vs CE). The reverse cross-entropy penalty overwhelms learning when noise rates are elevated.
+
+\begin{figure*}[t]
+\centering
+\begin{subfigure}[b]{0.49\textwidth}
+    \includegraphics[width=\textwidth]{figures/fig9_training_generalization_dynamics.pdf}
+    \caption{Clean Validation Accuracy over 30 Epochs.}
+    \label{fig:training_dynamics}
+\end{subfigure}
+\hfill
+\begin{subfigure}[b]{0.49\textwidth}
+    \includegraphics[width=\textwidth]{figures/fig10_seed_variability_and_memorization.pdf}
+    \caption{Memorisation Decay ($\text{Acc}_{\text{peak}} - \text{Acc}_{\text{final}}$).}
+    \label{fig:memorization}
+\end{subfigure}
+\caption{Training and generalisation dynamics illustrating early generalisation peaks and subsequent memorisation decay across methods.}
+\label{fig:dynamics}
+\end{figure*}
+
+\subsection{Training Dynamics and Memorisation Arrest}
+Figure~\ref{fig:dynamics} displays the epoch-by-epoch clean validation accuracy trajectories. Under Symmetric 50\% noise, uncorrected CE reaches a peak validation accuracy of $77.44\%$ at epoch $23.3 \pm 1.5$, after which validation accuracy deteriorates by $2.99\%$ as the network overfits corrupted labels. True $T$ loss correction substantially suppresses this memorisation decay to $1.00\%$, while GCE reduces it to $0.11\%$. Under Asymmetric 40\% noise, CE peaks early at epoch $22.3 \pm 2.5$ and degrades by $2.29\%$, whereas True $T$ maintains stability with only a $0.27\%$ drop.
+
+\section{Calibration Analysis}
+
+\input{tables/tab2_calibration_metrics.tex}
+
+\begin{figure*}[t]
+\centering
+\begin{subfigure}[b]{0.48\textwidth}
+    \includegraphics[width=\textwidth]{figures/fig2_ece_vs_noise.pdf}
+    \caption{Expected Calibration Error (ECE) across Noise Regimes.}
+    \label{fig:ece_vs_noise}
+\end{subfigure}
+\hfill
+\begin{subfigure}[b]{0.48\textwidth}
+    \includegraphics[width=\textwidth]{figures/fig3_brier_vs_noise.pdf}
+    \caption{Brier Score Decomposition across Noise Regimes.}
+    \label{fig:brier_vs_noise}
+\end{subfigure}
+\vskip\baselineskip
+\begin{subfigure}[b]{0.48\textwidth}
+    \includegraphics[width=\textwidth]{figures/fig7_reliability_diagrams.pdf}
+    \caption{15-Bin Reliability Diagrams (Asymmetric 40\%).}
+    \label{fig:reliability}
+\end{subfigure}
+\hfill
+\begin{subfigure}[b]{0.48\textwidth}
+    \includegraphics[width=\textwidth]{figures/fig8_clean_vs_corrupted_ts_delta.pdf}
+    \caption{Calibration Degradation $\Delta \text{ECE}$ from Corrupted TS.}
+    \label{fig:ts_delta}
+\end{subfigure}
+\caption{Confidence calibration and reliability analysis across methods and noise regimes. (a) Raw ECE and AdaECE. (b) Brier scores. (c) Uncalibrated confidence diagrams demonstrating underconfidence in SCE and overconfidence in CE. (d) $\Delta \text{ECE}$ penalty when post-hoc Temperature Scaling is fitted on corrupted vs clean validation sets.}
+\label{fig:calibration_study}
+\end{figure*}
+
+\subsection{Divergent Miscalibration Profiles}
+Table~\ref{tab:calibration} and Figure~\ref{fig:calibration_study} reveal striking divergences in calibration reliability:
+\begin{itemize}
+    \item \textbf{Overconfidence in CE}: As noise increases, CE becomes severely miscalibrated. In Symmetric 50\%, CE produces a raw ECE of $0.2595 \pm 0.0147$ and a Brier score of $0.4673$.
+    \item \textbf{Severe Underconfidence in SCE}: As predicted by Theorem~\ref{thm:vce}, SCE exhibits catastrophic probability underconfidence (Figure~\ref{fig:reliability}), with raw ECE reaching $0.3378 \pm 0.0190$ in Symmetric 50\% and Brier score reaching $0.7925$. SCE outputs diffuse probabilities across all classes, requiring extreme post-hoc temperature contraction ($T^* > 2.0$).
+    \item \textbf{Intrinsic Robustness of GCE}: GCE maintains remarkable calibration stability without any post-hoc intervention, achieving raw ECE of $0.0750$ in Symmetric 20\% and $0.0909$ in Symmetric 50\%.
+\end{itemize}
+
+\subsection{The Corrupted Validation Trap}
+In real-world workflows, practitioners rarely possess a verified clean validation set; instead, post-hoc calibrators are tuned on the same noisy validation split. We directly quantify this penalty via $\Delta \text{ECE} = \text{ECE}_{\text{corr}} - \text{ECE}_{\text{clean}}$.
+
+As documented in Table~\ref{tab:calibration} and Figure~\ref{fig:ts_delta}, tuning Temperature Scaling on corrupted validation sets consistently and significantly degrades clean test calibration across noisy regimes:
+\begin{itemize}
+    \item For CE under Symmetric 20\%: Clean TS achieves $\text{ECE} = 0.0779$, whereas Corrupted TS degrades to $\text{ECE} = 0.2442$ ($\Delta \text{ECE} = +0.1663$, paired $t = -5.86, p = 0.0276$).
+    \item For True $T$ under Symmetric 50\%: Clean TS achieves $\text{ECE} = 0.0169$, whereas Corrupted TS inflates ECE to $0.1061$ ($\Delta \text{ECE} = +0.0892$, paired $t = -35.34, p = 0.0008$).
+    \item For Anchor $T$ under Symmetric 20\%: $\Delta \text{ECE} = +0.0702$ ($t = -18.72, p = 0.0028$).
+\end{itemize}
+Because corrupted validation labels penalize high confidence on true classes, the temperature optimizer falsely inflates $T^*$, forcing the test model into severe underconfidence. This empirically demonstrates that post-hoc calibration cannot safely be performed on unvalidated noisy splits.
+
+\section{Transition-Matrix Estimation Analysis}
+
+\input{tables/tab3_transition_matrix_estimation.tex}
+
+\begin{figure*}[t]
+\centering
+\begin{subfigure}[b]{0.32\textwidth}
+    \includegraphics[width=\textwidth]{figures/fig4_transition_matrix_error.pdf}
+    \caption{Frobenius Estimation Error $\|\hat{T} - T\|_F$.}
+    \label{fig:frob_error}
+\end{subfigure}
+\hfill
+\begin{subfigure}[b]{0.32\textwidth}
+    \includegraphics[width=\textwidth]{figures/fig5_performance_vs_frobenius.pdf}
+    \caption{Test Accuracy vs Frobenius Error.}
+    \label{fig:perf_vs_frob}
+\end{subfigure}
+\hfill
+\begin{subfigure}[b]{0.32\textwidth}
+    \includegraphics[width=\textwidth]{figures/fig6_performance_vs_condition_number.pdf}
+    \caption{Accuracy \& ECE vs Condition Number.}
+    \label{fig:perf_vs_cond}
+\end{subfigure}
+\caption{Transition matrix estimation analysis. (a) Frobenius error $\|\hat{T}-T\|_F$ across estimation methods. (b) Downstream test accuracy vs Frobenius estimation error. (c) Accuracy and ECE plotted against matrix condition number $\kappa(\hat{T})$ on a logarithmic scale.}
+\label{fig:matrix_analysis}
+\end{figure*}
+
+\subsection{Estimation Quality and Inversion Ill-Conditioning}
+Table~\ref{tab:matrix_estimation} and Figure~\ref{fig:matrix_analysis} evaluate transition matrix estimation methods. Ground-truth True $T$ has zero Frobenius error by definition. Anchor Point estimation achieves competitive estimation quality under Clean ($\|\hat{T} - T\|_F = 0.1952 \pm 0.0733$) and Symmetric 20\% ($0.3435 \pm 0.0205$).
+
+However, under Asymmetric 40\% noise, Confident Learning experiences catastrophic conditioning degradation:
+\begin{itemize}
+    \item While its Frobenius error is moderate ($0.8390 \pm 0.0072$), its condition number surges to $\kappa(\hat{T}) = 34.66 \pm 3.47$, with spectral inverse norm $\|\hat{T}^{-1}\|_2 = 33.13 \pm 3.11$.
+    \item In contrast, True $T$ has $\kappa(T) = 5.54$ and $\|T^{-1}\|_2 = 5.00$.
+    \item As predicted by Proposition~\ref{prop:excess_risk}, this ill-conditioning amplifies finite-sample variance, resulting in an accuracy deficit ($82.58\%$ vs $87.80\%$) and severe calibration inflation (raw ECE surges to $0.1193 \pm 0.0388$).
+\end{itemize}
+Figure~\ref{fig:perf_vs_cond} illustrates that test accuracy decays exponentially and ECE inflates sharply once $\kappa(\hat{T}) > 10$.
+
+\section{Hypothesis and Research Question Evaluation}
+
+\input{tables/tab5_hypothesis_srq_decisions.tex}
+
+We rigorously evaluate all pre-registered hypotheses under a falsification-first framework:
+
+\subsection{Hypothesis Evaluations (H1--H4)}
+\begin{itemize}
+    \item \textbf{H1: Asymmetry-Driven Decision Boundary Displacement} (\textbf{Partially Supported}): Pre-registered claim: noise asymmetry $\|T - T^\top\|_F / \min_i T_{ii}$ displaces the Bayes-optimal decision boundary, requiring matrix inversion. Verified: Forward True $T$ gains $+6.19\%$ ($p=0.0019$, Holm $p=0.0442$) over CE on Asymmetric 40\%, whereas GCE degrades by $-2.88\%$. Held as Partially Supported because direct measurement of the linear hyperplane angle $\angle(w^*, \tilde{w})$ is pre-registered for a 2D synthetic ablation.
+    \item \textbf{H2: Parametric Generalisation Window \& Capacity} (\textbf{Partially Supported}): Pre-registered claim: generalization window contracts with capacity ratio $p/N$, and loss correction arrests memorisation. Verified: On PreActResNet-18 ($p/N \approx 240$), CE suffers a $2.99\%$ (Sym 0.5) and $2.29\%$ (Asym 0.4) memorisation drop, which True $T$ ($1.00\%$) and GCE ($0.11\%$) successfully arrest. Held as Partially Supported because empirical validation of the inverse scaling exponent across varying parameter counts requires a multi-capacity grid.
+    \item \textbf{H3: Divergent Miscalibration Profiles \& Corrupted Validation Recovery} (\textbf{Supported}): Pre-registered claim: robust losses exhibit divergent miscalibration, and corrupted-validation Temperature Scaling degrades clean calibration. Verified: Empirically supported across all evaluated regimes. Corrupted TS degrades clean ECE across noisy regimes (up to $+16.63\%$ penalty; $p=0.0276$). The falsification condition is nowhere met.
+    \item \textbf{H4: Controlled Confounder Audit on Human Noise} (\textbf{Out of Scope / Future Work}): Pre-registered claim: matrix methods experience excess degradation on CIFAR-10N human noise compared to sample filtering. Verdict: Re-scoped as out of scope for the present manuscript. The empirical benchmark is strictly focused on synthetic class-conditional noise. Real-world instance-dependent human noise evaluation is deferred to future work.
+\end{itemize}
+
+\subsection{Sub-Research Question Evaluations (SRQ1--SRQ4)}
+\begin{itemize}
+    \item \textbf{SRQ1: Theoretical Excess Risk Bounds vs Estimation Error \& Condition Number} (\textbf{Empirically Quantified}): Validated Proposition~\ref{prop:excess_risk}: when $\kappa(\hat{T})$ surges to $34.66$ (Confident Learning, Asym 40\%), excess risk expands, reducing accuracy from $87.80\%$ to $82.58\%$ and inflating ECE to $0.1193$.
+    \item \textbf{SRQ2: Calibration Recovery on Corrupted Validation Sets} (\textbf{Empirically Resolved}): Corrupted validation tuning inflicts severe ECE penalties ($+5.16\%$ to $+16.63\%$), whereas in-training robust losses (GCE) bypass validation dependence entirely.
+    \item \textbf{SRQ3: Parametric Generalisation Window Duration} (\textbf{Partially Resolved}): Peak generalisation occurs at epoch $22.3 \pm 2.5$ under Asymmetric 40\% on PreActResNet-18, followed by memorisation decay that is arrested by loss correction.
+    \item \textbf{SRQ4: Controlled Human Noise Transfer Gap} (\textbf{Out of Scope / Future Work}): Re-scoped as future work; benchmark scope is strictly class-conditional synthetic noise on CIFAR-10.
+\end{itemize}
+
+\section{Discussion and Practical Guidelines}
+
+Our theoretical and empirical findings provide clear, actionable recommendations for machine learning practitioners:
+\begin{enumerate}
+    \item \textbf{Diagnose Noise Symmetry Before Selecting Mitigation}: If label noise is predominantly symmetric (e.g., random annotator errors), practitioners should favor bounded robust losses such as Generalized Cross-Entropy (GCE, $q=0.7$). GCE matches or outperforms exact matrix correction ($82.40\%$ vs $79.17\%$) by dynamically trimming gradients on mislabeled instances, completely avoids matrix estimation errors, and maintains superior uncalibrated ECE ($0.0909$) without validation tuning.
+    \item \textbf{Deploy Inversion Strictly for Asymmetric Flips}: When noise is class-conditional and asymmetric (e.g., confounding visually similar classes such as Cat and Dog), the Bayes decision boundary is displaced, making matrix loss correction necessary ($+6.19\%$ gain over CE). In this regime, robust symmetric losses fail.
+    \item \textbf{Audit Condition Numbers $\kappa(\hat{T})$ Before Inversion}: Before deploying matrix loss correction, practitioners must compute $\kappa(\hat{T})$. If $\kappa(\hat{T}) > 10$, matrix inversion amplifies statistical variance, degrading downstream test accuracy and inflating calibration error. Regularization or shrinkage towards the identity matrix should be enforced.
+    \item \textbf{Never Tune Post-Hoc Calibrators on Corrupted Validation Splits}: If a certified clean validation split is unavailable, practitioners should avoid post-hoc Temperature Scaling. Fitting on noisy validation labels traps the calibrator into severe underconfidence. In-training bounded losses (GCE) provide vastly superior calibration stability.
+\end{enumerate}
+
+\section{Limitations}
+We explicitly catalog the following scientific limitations of this study:
+\begin{itemize}
+    \item \textbf{Sample Size and Exploratory Statistical Testing ($N=3$)}: All empirical benchmark runs were conducted across three random seeds ($N=3$, $\text{df}=2$). While this pilot grid provides paired evaluation across 28 distinct regime-track conditions, inferential testing with three seeds has low statistical power for detecting moderate effect sizes ($|\Delta| < 2\%$). Normality of differences cannot be formally tested, and non-parametric rank tests (e.g., Wilcoxon signed-rank) cannot reach significance at $\alpha=0.05$. Therefore, all empirical inferential statistics must be interpreted as exploratory observations rather than definitive population-level generalizations.
+    \item \textbf{Sample-Splitting Assumption vs. Practical Estimator Heuristics}: Proposition~\ref{prop:excess_risk} mathematically requires independent sample splitting ($S_T \perp S_R$) or fixed oracle operators. In contrast, standard empirical implementations of Confident Learning and Anchor Point estimation reuse the training data ($S_T = S_R$) via cross-validation or warm-up models. These same-sample estimators are empirical heuristics outside the strict coverage of Proposition~\ref{prop:excess_risk}.
+    \item \textbf{Synthetic Class-Conditional vs. Real-World Instance-Dependent Noise}: Our benchmark strictly investigates synthetic class-conditional noise (CCN) on CIFAR-10. Real-world human annotator noise (e.g., CIFAR-10N) involves instance-dependent feature ambiguity where the class-conditional assumption $P(\tilde{Y} \mid X, Y) = P(\tilde{Y} \mid Y)$ is violated. We formally designate human noise evaluation (H4) as out of scope for this manuscript and defer it to future work.
+    \item \textbf{Fixed Backbone and Dataset Scope}: Empirical evaluations were restricted to PreActResNet-18 on CIFAR-10. Validating capacity scaling dynamics across diverse architectures (e.g., Logistic Regression, Vision Transformers) and larger datasets remains an important direction for subsequent research.
+\end{itemize}
+
+\section{Conclusion}
+In this work, we presented an integrated theoretical and empirical study of excess risk bounds, inversion conditioning, and calibration distortion under class-conditional label noise. We proved finite-sample clean excess risk bounds under independent sample splitting, formalizing the role of transition matrix estimation error and condition number, contextualized the multi-class convex symmetry barrier, and derived exact population identities for posterior calibration distortion. Through a pre-registered 84-run exploratory benchmark on CIFAR-10 with PreActResNet-18, we evaluated hypotheses H1--H3, demonstrated that matrix inversion is uniquely required for asymmetric noise while GCE excels on symmetric noise via finite-sample gradient trimming, identified the failure mode of ill-conditioned matrix estimation ($\kappa(\hat{T}) \gg 1$), and discovered the corrupted validation trap in post-hoc calibration. Our findings provide rigorous theoretical boundaries and practical guidelines for developing reliable machine learning models in corrupted environments.
+
+\bibliographystyle{plainnat}
+\bibliography{references}
+
+\clearpage
+\appendix
+\onecolumn
+
+\section*{Supplementary Appendices}
+
+\section{Complete Mathematical Proofs}
+
+\subsection{Proof of Proposition 1 (Unbiasedness of Backward Loss Correction)}
+\begin{proof}
+Let $T \in [0, 1]^{K \times K}$ be row-stochastic with $T_{ij} = P(\tilde{Y} = j \mid Y = i)$, and assume $\det(T) \ne 0$. For any instance $x \in \mathcal{X}$, let $\mathbf{p}(x) \in \Delta^{K-1}$ be the clean class posterior row vector where $p_i(x) = P(Y = i \mid X = x)$. By the Law of Total Probability, the corrupted class posterior row vector $\tilde{\mathbf{p}}(x)$ is:
+\begin{equation}
+\tilde{p}_j(x) = P(\tilde{Y} = j \mid X = x) = \sum_{i=1}^K P(\tilde{Y} = j \mid Y = i, X = x) P(Y = i \mid X = x) = \sum_{i=1}^K p_i(x) T_{ij}.
+\end{equation}
+In matrix notation, $\tilde{\mathbf{p}}(x) = \mathbf{p}(x) T$.
+
+Now, consider the backward corrected loss vector $\vec{\tilde{\ell}}(f(x)) = T^{-1} \vec{\ell}(f(x)) \in \mathbb{R}^K$. The expected loss under the corrupted conditional distribution at $x$ is:
+\begin{align}
+\mathbb{E}_{\tilde{Y} \mid x} [\tilde{\ell}(f(x), \tilde{Y})] &= \sum_{j=1}^K \tilde{p}_j(x) [\vec{\tilde{\ell}}(f(x))]_j = \tilde{\mathbf{p}}(x) \vec{\tilde{\ell}}(f(x)) \\
+&= (\mathbf{p}(x) T) (T^{-1} \vec{\ell}(f(x))) \\
+&= \mathbf{p}(x) (T T^{-1}) \vec{\ell}(f(x)) \\
+&= \mathbf{p}(x) \vec{\ell}(f(x)) = \sum_{i=1}^K p_i(x) \ell(f(x), i) = \mathbb{E}_{Y \mid x} [\ell(f(x), Y)].
+\end{align}
+Taking the expectation over the marginal distribution $P_X(x)$ completes the proof:
+\begin{equation}
+\mathbb{E}_{(X, \tilde{Y}) \sim \tilde{\mathcal{D}}} [\tilde{\ell}(f(X), \tilde{Y})] = \mathbb{E}_X [\mathbb{E}_{\tilde{Y} \mid X} [\tilde{\ell}(f(X), \tilde{Y})]] = \mathbb{E}_X [\mathbb{E}_{Y \mid X} [\ell(f(X), Y)]] = \mathbb{E}_{(X, Y) \sim \mathcal{D}} [\ell(f(X), Y)].
+\end{equation}
+\end{proof}
+
+\subsection{Proof of Proposition 2A (Pointwise Expected Risk Bias)}
+\begin{proof}
+Let $\hat{T} = T + E$ with $\|E\|_F \le \epsilon < 1/\|T^{-1}\|_2$. Since $\|E\|_2 \le \|E\|_F \le \epsilon$, we have $\|T^{-1} E\|_2 \le \|T^{-1}\|_2 \|E\|_2 \le \|T^{-1}\|_2 \epsilon < 1$. Thus, $(I + T^{-1} E)$ is invertible by the Neumann series theorem, and:
+\begin{equation}
+\hat{T}^{-1} - T^{-1} = (T + E)^{-1} - T^{-1} = (I + T^{-1} E)^{-1} T^{-1} - T^{-1} = - (I + T^{-1} E)^{-1} T^{-1} E T^{-1}.
+\end{equation}
+Taking the spectral operator norm:
+\begin{equation}
+\|\hat{T}^{-1} - T^{-1}\|_2 \le \frac{\|T^{-1}\|_2^2 \|E\|_2}{1 - \|T^{-1}\|_2 \|E\|_2} \le \frac{\|T^{-1}\|_2^2 \epsilon}{1 - \|T^{-1}\|_2 \epsilon}.
+\end{equation}
+Now consider the pointwise bias for any hypothesis $f$:
+\begin{align}
+\left| \mathbb{E}_{\tilde{\mathcal{D}}} [\hat{T}^{-1} \vec{\ell}(f(X))]_{\tilde{Y}} - R_{\mathcal{D}}(f) \right| &= \left| \mathbb{E}_X \left[ \tilde{\mathbf{p}}(X) (\hat{T}^{-1} - T^{-1}) \vec{\ell}(f(X)) \right] \right| \\
+&\le \mathbb{E}_X \left[ \|\tilde{\mathbf{p}}(X)\|_2 \|\hat{T}^{-1} - T^{-1}\|_2 \|\vec{\ell}(f(X))\|_2 \right].
+\end{align}
+Since $\tilde{\mathbf{p}}(X) \in \Delta^{K-1}$, $\|\tilde{\mathbf{p}}(X)\|_2 \le \|\tilde{\mathbf{p}}(X)\|_1 = 1$. Since $0 \le \ell \le M$, $\|\vec{\ell}(f(X))\|_2 \le \sqrt{K} M$. Substituting the matrix perturbation bound yields:
+\begin{equation}
+\left| \mathbb{E}_{\tilde{\mathcal{D}}} [\hat{T}^{-1} \vec{\ell}(f(X))]_{\tilde{Y}} - R_{\mathcal{D}}(f) \right| \le 1 \cdot \frac{\|T^{-1}\|_2^2 \epsilon}{1 - \|T^{-1}\|_2 \epsilon} \cdot \sqrt{K} M = \frac{\sqrt{K} M \|T^{-1}\|_2^2 \epsilon}{1 - \|T^{-1}\|_2 \epsilon}.
+\end{equation}
+\end{proof}
+
+\subsection{Proof of Proposition 2B (Finite-Sample Clean Excess Risk Bound)}
+\begin{proof}
+Let $f^* = \arg\min_{f \in \mathcal{F}} R_{\mathcal{D}}(f)$. By standard risk decomposition:
+\begin{align}
+R_{\mathcal{D}}(\hat{f}) - R_{\mathcal{D}}(f^*) &= \left( R_{\mathcal{D}}(\hat{f}) - R_{\tilde{\mathcal{D}}, \hat{T}}(\hat{f}) \right) + \left( R_{\tilde{\mathcal{D}}, \hat{T}}(\hat{f}) - \hat{R}_{S_R, \hat{T}}(\hat{f}) \right) \\
+&\quad + \left( \hat{R}_{S_R, \hat{T}}(\hat{f}) - \hat{R}_{S_R, \hat{T}}(f^*) \right) + \left( \hat{R}_{S_R, \hat{T}}(f^*) - R_{\tilde{\mathcal{D}}, \hat{T}}(f^*) \right) \\
+&\quad + \left( R_{\tilde{\mathcal{D}}, \hat{T}}(f^*) - R_{\mathcal{D}}(f^*) \right).
+\end{align}
+By definition of $\hat{f}$ as the empirical minimizer, $\hat{R}_{S_R, \hat{T}}(\hat{f}) - \hat{R}_{S_R, \hat{T}}(f^*) \le 0$. By Proposition~\ref{prop:bias}, the first and fifth terms are each bounded by $\frac{\sqrt{K} M \|T^{-1}\|_2^2 \epsilon}{1 - \|T^{-1}\|_2 \epsilon}$. Thus:
+\begin{equation}
+R_{\mathcal{D}}(\hat{f}) - R_{\mathcal{D}}(f^*) \le \frac{2 \sqrt{K} M \|T^{-1}\|_2^2 \epsilon}{1 - \|T^{-1}\|_2 \epsilon} + 2 \sup_{f \in \mathcal{F}} \left| \hat{R}_{S_R, \hat{T}}(f) - R_{\tilde{\mathcal{D}}, \hat{T}}(f) \right|.
+\end{equation}
+To bound the uniform deviation, consider the loss function $g_f(x, \tilde{y}) = [\hat{T}^{-1} \vec{\ell}(f(x))]_{\tilde{y}}$. Since $\ell$ is $M$-bounded, $|g_f(x, \tilde{y})| \le \sqrt{K} M \|\hat{T}^{-1}\|_2$. By McDiarmid's inequality, with probability at least $1 - \delta$:
+\begin{equation}
+\sup_{f \in \mathcal{F}} \left| \hat{R}_{S_R, \hat{T}}(f) - R_{\tilde{\mathcal{D}}, \hat{T}}(f) \right| \le 2 \mathcal{R}_{n_R}(\mathcal{G}) + \sqrt{K} M \|\hat{T}^{-1}\|_2 \sqrt{\frac{\ln(2/\delta)}{2 n_R}}.
+\end{equation}
+Since $\ell$ is $L_{\ell, 2}$-Lipschitz, the vector-valued contraction inequality (Maurer, 2016) implies:
+\begin{equation}
+\mathcal{R}_{n_R}(\mathcal{G}) \le \sqrt{2} L_{\ell, 2} \|\hat{T}^{-1}\|_2 \mathcal{R}_{n_R}(\mathcal{F}).
+\end{equation}
+Combining these inequalities produces the stated finite-sample bound.
+\end{proof}
+
+\subsection{Proof of Theorems 4A and 4B (Calibration Distortion)}
+\begin{proof}
+Let $f(X) = \mathbf{p} \in \Delta^{K-1}$. By assumption, $f$ is perfectly calibrated on clean data $\mathcal{D}$, meaning $\mathbb{E}[\mathbf{e}_Y \mid f(X) = \mathbf{p}] = \mathbf{p}$. Under class-conditional label noise, $P(\tilde{Y} = j \mid Y = i, X = x) = T_{ij}$. Therefore:
+\begin{align}
+\mathbb{E}[(\mathbf{e}_{\tilde{Y}})_j \mid f(X) = \mathbf{p}] &= P(\tilde{Y} = j \mid f(X) = \mathbf{p}) = \sum_{i=1}^K P(\tilde{Y} = j \mid Y = i) P(Y = i \mid f(X) = \mathbf{p}) \\
+&= \sum_{i=1}^K T_{ij} p_i = [T^\top \mathbf{p}]_j.
+\end{align}
+Thus, $\mathbb{E}[\mathbf{e}_{\tilde{Y}} \mid f(X) = \mathbf{p}] = T^\top \mathbf{p}$. The Vector Calibration Error is:
+\begin{equation}
+\text{VCE}_{\tilde{\mathcal{D}}}(f) = \mathbb{E}_{\mathbf{p}} \left[ \| \mathbb{E}[\mathbf{e}_{\tilde{Y}} \mid f(X) = \mathbf{p}] - \mathbf{p} \|_1 \right] = \mathbb{E}_{\mathbf{p}} \left[ \| T^\top \mathbf{p} - \mathbf{p} \|_1 \right] = \mathbb{E}_{\mathbf{p}} \left[ \| (T^\top - I) \mathbf{p} \|_1 \right],
+\end{equation}
+which proves Theorem~4A.
+
+For Theorem~4B, under symmetric noise $T = (1 - \eta) I + \frac{\eta}{K-1} (\mathbf{1}\mathbf{1}^\top - I)$, we compute:
+\begin{align}
+T^\top \mathbf{p} &= (1 - \eta) \mathbf{p} + \frac{\eta}{K-1} (\mathbf{1} - \mathbf{p}) = \left( 1 - \eta - \frac{\eta}{K-1} \right) \mathbf{p} + \frac{\eta}{K-1} \mathbf{1} \\
+&= \left( 1 - \frac{\eta K}{K-1} \right) \mathbf{p} + \frac{\eta K}{K-1} \left( \frac{1}{K} \mathbf{1} \right).
+\end{align}
+Let $\hat{y} = \arg\max_k p_k$ and $\hat{p} = \max_k p_k = p_{\hat{y}}$. The true posterior of the predicted class under noise is:
+\begin{equation}
+[T^\top \mathbf{p}]_{\hat{y}} = \left( 1 - \frac{\eta K}{K-1} \right) \hat{p} + \frac{\eta}{K-1}.
+\end{equation}
+The confidence calibration discrepancy is:
+\begin{equation}
+\hat{p} - [T^\top \mathbf{p}]_{\hat{y}} = \frac{\eta K}{K-1} \hat{p} - \frac{\eta}{K-1} = \frac{\eta K}{K-1} \left( \hat{p} - \frac{1}{K} \right).
+\end{equation}
+Taking the expectation over $\hat{p}$ yields:
+\begin{equation}
+\text{ECE}_{\tilde{\mathcal{D}}}(f) = \frac{\eta K}{K-1} \mathbb{E} \left[ \max_k f_k(X) - \frac{1}{K} \right],
+\end{equation}
+completing the proof of Theorem~4B.
+\end{proof}
+
+\section{Extended Tables}
+
+\subsection{Full Pairwise Inferential Statistics Matrix}
+Table~\ref{tab:app_pairwise} provides the complete inferential comparison across all 24 pairs, documenting both unadjusted $p$-values and family-wise Holm-Bonferroni corrected thresholds.
+
+\begin{table*}[h]
+\centering
+\caption{Complete Statistical Significance Matrix: Unadjusted and Holm-Bonferroni Corrected Tests vs CE Baseline.}
+\label{tab:app_pairwise}
+\small
+\begin{tabular}{llcccccc}
+\toprule
+\textbf{Regime} & \textbf{Comparison} & \textbf{Mean $\Delta$ Acc (\%)} & \textbf{$t$-statistic} & \textbf{Exact $p$} & \textbf{Holm $p$} & \textbf{Cohen's $d$} & \textbf{95\% CI} \\
+\midrule
+Clean & GCE vs CE & -1.80 & -22.44 & 0.00198 & 0.0442 & -12.96 & [-2.14, -1.45] \\
+Clean & SCE vs CE & -10.80 & -14.31 & 0.00485 & 0.0885 & -8.26 & [-14.05, -7.55] \\
+Clean & Forward (True $T$) vs CE & -0.18 & -3.93 & 0.05911 & 0.2955 & -2.27 & [-0.38, +0.02] \\
+Clean & Forward (Anchor $T$) vs CE & -0.20 & -5.01 & 0.03755 & 0.2599 & -2.89 & [-0.38, -0.03] \\
+Clean & Forward (ConfLearning $T$) vs CE & -0.63 & -3.78 & 0.06341 & 0.2955 & -2.18 & [-1.35, +0.09] \\
+Clean & Forward (Perturbed $T$) vs CE & -0.91 & -3.77 & 0.06368 & 0.2955 & -2.18 & [-1.95, +0.13] \\
+\midrule
+Sym 20\% & GCE vs CE & +3.15 & +11.81 & 0.00709 & 0.1091 & +6.82 & [+2.00, +4.30] \\
+Sym 20\% & SCE vs CE & -6.84 & -9.67 & 0.01053 & 0.1264 & -5.58 & [-9.89, -3.80] \\
+Sym 20\% & Forward (True $T$) vs CE & +2.35 & +22.60 & 0.00195 & 0.0442 & +13.05 & [+1.91, +2.80] \\
+Sym 20\% & Forward (Anchor $T$) vs CE & +1.59 & +8.62 & 0.01318 & 0.1403 & +4.98 & [+0.80, +2.39] \\
+Sym 20\% & Forward (ConfLearning $T$) vs CE & +2.89 & +10.83 & 0.00842 & 0.1095 & +6.25 & [+1.74, +4.04] \\
+Sym 20\% & Forward (Perturbed $T$) vs CE & +3.62 & +14.60 & 0.00466 & 0.0885 & +8.43 & [+2.55, +4.68] \\
+\midrule
+Sym 50\% & GCE vs CE & +7.95 & +11.39 & 0.00761 & 0.1091 & +6.58 & [+4.95, +10.95] \\
+Sym 50\% & SCE vs CE & -23.42 & -17.69 & 0.00318 & 0.0636 & -10.21 & [-29.12, -17.73] \\
+Sym 50\% & Forward (True $T$) vs CE & +4.72 & +27.89 & 0.00128 & 0.0308 & +16.10 & [+3.99, +5.45] \\
+Sym 50\% & Forward (Anchor $T$) vs CE & +3.88 & +5.04 & 0.03713 & 0.2599 & +2.91 & [+0.57, +7.18] \\
+Sym 50\% & Forward (ConfLearning $T$) vs CE & +5.52 & +8.77 & 0.01276 & 0.1403 & +5.06 & [+2.81, +8.22] \\
+Sym 50\% & Forward (Perturbed $T$) vs CE & +7.55 & +14.18 & 0.00494 & 0.0885 & +8.19 & [+5.26, +9.84] \\
+\midrule
+Asym 40\% & GCE vs CE & -2.88 & -8.67 & 0.01305 & 0.1403 & -5.00 & [-4.31, -1.45] \\
+Asym 40\% & SCE vs CE & -18.47 & -8.77 & 0.01276 & 0.1403 & -5.06 & [-27.54, -9.41] \\
+Asym 40\% & Forward (True $T$) vs CE & +6.19 & +22.77 & 0.00192 & 0.0442 & +13.15 & [+5.02, +7.36] \\
+Asym 40\% & Forward (Anchor $T$) vs CE & +2.01 & +1.35 & 0.30868 & 0.6174 & +0.78 & [-4.38, +8.40] \\
+Asym 40\% & Forward (ConfLearning $T$) vs CE & +0.97 & +0.99 & 0.42625 & 0.6174 & +0.57 & [-3.23, +5.16] \\
+Asym 40\% & Forward (Perturbed $T$) vs CE & +5.42 & +12.05 & 0.00682 & 0.1091 & +6.96 & [+3.48, +7.36] \\
+\bottomrule
+\end{tabular}
+\end{table*}
+
+\end{document}

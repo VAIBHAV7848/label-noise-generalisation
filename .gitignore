@@ -84,7 +84,18 @@ mobile_app/build/
 *.h5
 
 
+# LaTeX build artifacts
+*.aux
+*.log
+*.bbl
+*.blg
+*.fls
+*.fdb_latexmk
+*.out
+*.synctex.gz
+
 # OS generated
 .DS_Store
 Thumbs.db
+
 

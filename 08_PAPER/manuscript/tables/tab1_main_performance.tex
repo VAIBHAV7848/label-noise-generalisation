@@ -1,0 +1,20 @@
+\begin{table*}[t]
+\centering
+\caption{Main Benchmark Performance across 84 Pilot Runs: Top-1 Test Accuracy (\%, Mean $\pm$ SD) and Generalization Degradation ($\Delta$ Drop relative to Clean CE).}
+\label{tab:main_performance}
+\small
+\begin{tabular}{lcccccccc}
+\hline
+\textbf{Method} & \multicolumn{2}{c}{\textbf{Clean}} & \multicolumn{2}{c}{\textbf{Symmetric 20\%}} & \multicolumn{2}{c}{\textbf{Symmetric 50\%}} & \multicolumn{2}{c}{\textbf{Asymmetric 40\%}} \\
+ & Top-1 (\%) & $\Delta$ Drop & Top-1 (\%) & $\Delta$ Drop & Top-1 (\%) & $\Delta$ Drop & Top-1 (\%) & $\Delta$ Drop \\
+\hline
+Cross-Entropy (CE) & 91.83 $\pm$ 0.13 & +0.00 & 85.02 $\pm$ 0.38 & +6.81 & 74.45 $\pm$ 1.01 & +17.37 & 81.62 $\pm$ 0.71 & +10.21 \\
+Generalized CE (GCE) & 90.03 $\pm$ 0.25 & +1.80 & 88.17 $\pm$ 0.26 & +3.66 & 82.40 $\pm$ 0.42 & +9.43 & 78.73 $\pm$ 0.48 & +13.09 \\
+Symmetric CE (SCE) & 81.03 $\pm$ 1.19 & +10.80 & 78.17 $\pm$ 0.96 & +13.65 & 51.03 $\pm$ 3.23 & +40.80 & 63.14 $\pm$ 3.74 & +28.68 \\
+Forward (True $T$) & 91.64 $\pm$ 0.12 & +0.18 & 87.37 $\pm$ 0.31 & +4.46 & 79.17 $\pm$ 0.72 & +12.65 & 87.80 $\pm$ 0.25 & +4.02 \\
+Forward (Anchor $T$) & 91.62 $\pm$ 0.15 & +0.20 & 86.61 $\pm$ 0.48 & +5.22 & 78.33 $\pm$ 0.84 & +13.50 & 83.63 $\pm$ 2.74 & +8.20 \\
+Forward (ConfLearning $T$) & 91.19 $\pm$ 0.17 & +0.63 & 87.91 $\pm$ 0.17 & +3.92 & 79.97 $\pm$ 0.10 & +11.86 & 82.58 $\pm$ 2.14 & +9.24 \\
+Forward (Perturbed $T$) & 90.92 $\pm$ 0.29 & +0.91 & 88.63 $\pm$ 0.07 & +3.19 & 82.00 $\pm$ 0.76 & +9.82 & 87.04 $\pm$ 0.15 & +4.79 \\
+\hline
+\end{tabular}
+\end{table*}

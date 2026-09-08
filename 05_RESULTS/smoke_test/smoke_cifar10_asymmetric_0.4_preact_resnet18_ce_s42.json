@@ -1,0 +1,17 @@
+{
+  "status": "FAILED",
+  "error_message": "Unknown track: ce",
+  "provenance": {
+    "experiment_id": "smoke_cifar10_asymmetric_0.4_preact_resnet18_ce_s42",
+    "timestamp_utc": "2026-09-02T13:03:49.975425+00:00",
+    "git_commit_sha": "ea0946ae5f530a768aba80808eb45a2ee80699a7",
+    "device": "NVIDIA GeForce RTX 4050 Laptop GPU"
+  },
+  "configuration": {
+    "dataset": "cifar10",
+    "noise_regime": "asymmetric_0.4",
+    "model": "PreActResNet18",
+    "track": "ce",
+    "seed": 42
+  }
+}

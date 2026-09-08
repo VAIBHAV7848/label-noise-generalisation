@@ -1,0 +1,5 @@
+\contentsline {section}{\numberline {1}Detailed Mathematical Proofs}{2}{section.1}%
+\contentsline {subsection}{\numberline {1.1}Lemma: Matrix Inversion Perturbation via Neumann Series}{2}{subsection.1.1}%
+\contentsline {subsection}{\numberline {1.2}Proposition 2A: Pointwise Expected Risk Bias}{2}{subsection.1.2}%
+\contentsline {subsection}{\numberline {1.3}Proposition 2B: Finite-Sample Clean Excess Risk Bound}{3}{subsection.1.3}%
+\contentsline {section}{\numberline {2}Full Statistical Test Matrix}{3}{section.2}%

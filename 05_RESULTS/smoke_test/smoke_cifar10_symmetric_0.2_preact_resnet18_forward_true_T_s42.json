@@ -1,0 +1,17 @@
+{
+  "status": "FAILED",
+  "error_message": "Unknown track: forward_true_T",
+  "provenance": {
+    "experiment_id": "smoke_cifar10_symmetric_0.2_preact_resnet18_forward_true_T_s42",
+    "timestamp_utc": "2026-09-02T13:03:49.897624+00:00",
+    "git_commit_sha": "ea0946ae5f530a768aba80808eb45a2ee80699a7",
+    "device": "NVIDIA GeForce RTX 4050 Laptop GPU"
+  },
+  "configuration": {
+    "dataset": "cifar10",
+    "noise_regime": "symmetric_0.2",
+    "model": "PreActResNet18",
+    "track": "forward_true_T",
+    "seed": 42
+  }
+}

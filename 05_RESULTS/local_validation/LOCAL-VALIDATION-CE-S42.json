@@ -1,0 +1,48 @@
+{
+  "status": "COMPLETED",
+  "provenance": {
+    "experiment_id": "LOCAL-VALIDATION-CE-S42",
+    "timestamp_utc": "2026-09-03T12:55:06.037156+00:00",
+    "git_commit_sha": "ddeb79e178e2fb481a383f894c0fe00c61731e80",
+    "device": "NVIDIA GeForce RTX 4050 Laptop GPU",
+    "training_duration_sec": 30.42813229560852
+  },
+  "configuration": {
+    "dataset": "cifar10",
+    "noise_regime": "clean",
+    "model": "PreActResNet18",
+    "track": "CE",
+    "seed": 42,
+    "epochs": 1,
+    "batch_size": 128,
+    "lr": 0.05,
+    "frobenius_error": 0.0,
+    "condition_number": 1.0,
+    "spectral_norm_inv": 1.0
+  },
+  "metrics": {
+    "test_top1_acc": 52.68,
+    "test_top5_acc": 94.4,
+    "raw_test_ece": 0.09883035860657693,
+    "raw_ada_ece": 0.09831382305026054,
+    "raw_brier": 0.6160065635824813,
+    "temp_clean": 1.3974498510360718,
+    "ts_clean_test_ece": 0.01896406871676445,
+    "ts_clean_test_brier": 0.6026732347260997,
+    "temp_corrupted": 1.3884705305099487,
+    "ts_corrupted_test_ece": 0.01873071807324887,
+    "ts_corrupted_test_brier": 0.6026478376884569,
+    "val_calibration_delta": -0.00023335064351558132
+  },
+  "history": {
+    "train_loss": [
+      1.5547307918003628
+    ],
+    "train_acc": [
+      42.417142857142856
+    ],
+    "clean_val_acc": [
+      53.120000000000005
+    ]
+  }
+}

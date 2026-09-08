@@ -1,0 +1,48 @@
+{
+  "status": "COMPLETED",
+  "provenance": {
+    "experiment_id": "smoke_cifar10_symmetric_0.2_preact_resnet18_ForwardCorrection_TrueT_s42",
+    "timestamp_utc": "2026-09-02T13:07:07.460902+00:00",
+    "git_commit_sha": "ea0946ae5f530a768aba80808eb45a2ee80699a7",
+    "device": "NVIDIA GeForce RTX 4050 Laptop GPU",
+    "training_duration_sec": 26.729989051818848
+  },
+  "configuration": {
+    "dataset": "cifar10",
+    "noise_regime": "symmetric_0.2",
+    "model": "PreActResNet18",
+    "track": "ForwardCorrection_TrueT",
+    "seed": 42,
+    "epochs": 1,
+    "batch_size": 128,
+    "lr": 0.05,
+    "frobenius_error": 0.0,
+    "condition_number": 1.2857142857142858,
+    "spectral_norm_inv": 1.285714285714286
+  },
+  "metrics": {
+    "test_top1_acc": 51.17,
+    "test_top5_acc": 92.57000000000001,
+    "raw_test_ece": 0.027568648280203348,
+    "raw_ada_ece": 0.03031014331430196,
+    "raw_brier": 0.627558453325954,
+    "temp_clean": 1.2616856098175049,
+    "ts_clean_test_ece": 0.05398877440989017,
+    "ts_clean_test_brier": 0.6301392251040248,
+    "temp_corrupted": 1.6178221702575684,
+    "ts_corrupted_test_ece": 0.12026924604028462,
+    "ts_corrupted_test_brier": 0.6456703149740549,
+    "val_calibration_delta": 0.06628047163039445
+  },
+  "history": {
+    "train_loss": [
+      1.9429868115016393
+    ],
+    "train_acc": [
+      31.742857142857144
+    ],
+    "clean_val_acc": [
+      51.14
+    ]
+  }
+}

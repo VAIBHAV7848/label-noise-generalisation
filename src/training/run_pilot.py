@@ -25,6 +25,7 @@ from ..noise.matrix_utils import (
     build_asymmetric_cifar10_transition_matrix,
     compute_matrix_condition_number,
 )
+from ..noise.real_world import load_cifar10n_noise, compute_empirical_transition_matrix
 from ..losses.robust_losses import GeneralizedCrossEntropyLoss, SymmetricCrossEntropyLoss
 from ..losses.loss_correction import ForwardLossCorrection
 from ..estimators.anchor_point import estimate_transition_matrix_anchor_points
@@ -169,6 +170,18 @@ def build_pilot_splits(
         val_corrupted_noisy_targets, _, _, _ = generate_synthetic_noisy_labels(
             val_corrupted_clean_targets, num_classes, "asymmetric", 0.4, seed=seed + 1000
         )
+    elif noise_regime == "cifar10n_worst":
+        cifar10n_path = os.path.join(cifar_train.root, "CIFAR-10_human.pt")
+        all_noisy, _, _ = load_cifar10n_noise(cifar10n_path, regime="worst")
+        train_noisy_targets = all_noisy[train_idx]
+        val_corrupted_noisy_targets = all_noisy[val_corrupted_idx]
+        T = compute_empirical_transition_matrix(train_clean_targets, train_noisy_targets, num_classes)
+    elif noise_regime == "cifar10n_aggre":
+        cifar10n_path = os.path.join(cifar_train.root, "CIFAR-10_human.pt")
+        all_noisy, _, _ = load_cifar10n_noise(cifar10n_path, regime="aggre")
+        train_noisy_targets = all_noisy[train_idx]
+        val_corrupted_noisy_targets = all_noisy[val_corrupted_idx]
+        T = compute_empirical_transition_matrix(train_clean_targets, train_noisy_targets, num_classes)
     else:
         raise ValueError(f"Unknown noise regime: {noise_regime}")
 

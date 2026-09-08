@@ -11,7 +11,7 @@ from .synthetic import (
     inject_noise_with_transition_matrix,
     generate_synthetic_noisy_labels,
 )
-from .real_world import load_cifar10n_noise
+from .real_world import load_cifar10n_noise, compute_empirical_transition_matrix
 
 __all__ = [
     "build_symmetric_transition_matrix",
@@ -22,4 +22,6 @@ __all__ = [
     "inject_noise_with_transition_matrix",
     "generate_synthetic_noisy_labels",
     "load_cifar10n_noise",
+    "compute_empirical_transition_matrix",
 ]
+

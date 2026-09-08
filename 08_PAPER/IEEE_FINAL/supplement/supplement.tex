@@ -1,0 +1,155 @@
+\documentclass[11pt,onecolumn]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb,amsfonts,amsthm}
+\usepackage{booktabs}
+\usepackage{hyperref}
+\usepackage{cite}
+\usepackage{microtype}
+
+\newtheorem{theorem}{Theorem}
+\newtheorem{proposition}{Proposition}
+\newtheorem{lemma}{Lemma}
+\newtheorem{remark}{Remark}
+
+\title{\textbf{Supplementary Materials: Excess Risk Bounds, Inversion Conditioning, and Calibration Distortion under Class-Conditional Label Noise}}
+\author{Vaibhav Chavanpatil, Darshan Kittur, Purvi Sammatshetti, Vaishnavi Modekar, Veena P. Badiger, Santosh Pattar \\
+Department of Computer Science and Engineering, KLE Technological University, Belagavi, India}
+\date{}
+
+\begin{document}
+\maketitle
+
+\tableofcontents
+\newpage
+
+\section{Detailed Mathematical Proofs}
+
+\subsection{Lemma: Matrix Inversion Perturbation via Neumann Series}
+\begin{lemma}
+Let $T, \hat{T} \in \mathbb{R}^{K \times K}$ be non-singular matrices, and let $E = \hat{T} - T$ denote the estimation error with $\|E\|_2 \le \|E\|_F \le \epsilon < \frac{1}{\|T^{-1}\|_2}$. Then:
+\begin{equation}
+\|\hat{T}^{-1} - T^{-1}\|_2 \le \frac{\|T^{-1}\|_2^2 \epsilon}{1 - \|T^{-1}\|_2 \epsilon}.
+\end{equation}
+\end{lemma}
+\begin{proof}
+We write $\hat{T} = T + E = T (I + T^{-1} E)$. Since $\|T^{-1} E\|_2 \le \|T^{-1}\|_2 \|E\|_2 \le \|T^{-1}\|_2 \epsilon < 1$, the matrix $I + T^{-1} E$ is invertible by the Neumann series theorem, with:
+\begin{equation}
+(I + T^{-1} E)^{-1} = \sum_{k=0}^\infty (-T^{-1} E)^k = I - T^{-1} E + (T^{-1} E)^2 - \dots
+\end{equation}
+Consequently:
+\begin{equation}
+\hat{T}^{-1} = (I + T^{-1} E)^{-1} T^{-1} = \sum_{k=0}^\infty (-T^{-1} E)^k T^{-1}.
+\end{equation}
+Subtracting $T^{-1}$ yields:
+\begin{equation}
+\hat{T}^{-1} - T^{-1} = \sum_{k=1}^\infty (-T^{-1} E)^k T^{-1} = - (I + T^{-1} E)^{-1} T^{-1} E T^{-1}.
+\end{equation}
+Taking operator norms:
+\begin{equation}
+\|\hat{T}^{-1} - T^{-1}\|_2 \le \|(I + T^{-1} E)^{-1}\|_2 \|T^{-1}\|_2^2 \|E\|_2 \le \frac{\|T^{-1}\|_2^2 \|E\|_2}{1 - \|T^{-1} E\|_2} \le \frac{\|T^{-1}\|_2^2 \epsilon}{1 - \|T^{-1}\|_2 \epsilon}.
+\end{equation}
+\end{proof}
+
+\subsection{Proposition 2A: Pointwise Expected Risk Bias}
+\begin{proposition}
+Let $T$ be an invertible row-stochastic transition matrix, and let $\hat{T}$ satisfy $\|E\|_F \le \epsilon < 1/\|T^{-1}\|_2$. Assume $0 \le \ell \le M$. Then for any measurable $f: \mathcal{X} \to \Delta^{K-1}$:
+\begin{equation}
+\left| \mathbb{E}_{\tilde{\mathcal{D}}} [\hat{T}^{-1} \vec{\ell}(f(X))]_{\tilde{Y}} - R_{\mathcal{D}}(f) \right| \le \frac{\sqrt{K} M \|T^{-1}\|_2^2 \epsilon}{1 - \|T^{-1}\|_2 \epsilon}.
+\end{equation}
+\end{proposition}
+\begin{proof}
+Let $\tilde{\mathbf{p}}(x) \in \Delta^{K-1}$ be the corrupted class posterior row vector at $x$. By total probability, $\tilde{\mathbf{p}}(x) = \mathbf{p}(x) T$. By Proposition 1, the clean risk satisfies $R_{\mathcal{D}}(f) = \mathbb{E}_X [\tilde{\mathbf{p}}(X) T^{-1} \vec{\ell}(f(X))]$.
+Under imperfect estimator $\hat{T}$:
+\begin{equation}
+\mathbb{E}_{\tilde{\mathcal{D}}} [\hat{T}^{-1} \vec{\ell}(f(X))]_{\tilde{Y}} = \mathbb{E}_X [\tilde{\mathbf{p}}(X) \hat{T}^{-1} \vec{\ell}(f(X))].
+\end{equation}
+Subtracting clean risk:
+\begin{align}
+\left| \mathbb{E}_{\tilde{\mathcal{D}}} [\hat{T}^{-1} \vec{\ell}(f(X))]_{\tilde{Y}} - R_{\mathcal{D}}(f) \right| &= \left| \mathbb{E}_X \left[ \tilde{\mathbf{p}}(X) (\hat{T}^{-1} - T^{-1}) \vec{\ell}(f(X)) \right] \right| \\
+&\le \mathbb{E}_X \left[ \|\tilde{\mathbf{p}}(X)\|_2 \|\hat{T}^{-1} - T^{-1}\|_2 \|\vec{\ell}(f(X))\|_2 \right].
+\end{align}
+Since $\tilde{\mathbf{p}}(X) \in \Delta^{K-1}$, $\|\tilde{\mathbf{p}}(X)\|_2 \le \|\tilde{\mathbf{p}}(X)\|_1 = 1$. Since each entry of $\vec{\ell}$ is bounded by $M$, $\|\vec{\ell}(f(X))\|_2 \le \sqrt{K} M$.
+Applying Lemma 1:
+\begin{equation}
+\left| \mathbb{E}_{\tilde{\mathcal{D}}} [\hat{T}^{-1} \vec{\ell}(f(X))]_{\tilde{Y}} - R_{\mathcal{D}}(f) \right| \le 1 \cdot \frac{\|T^{-1}\|_2^2 \epsilon}{1 - \|T^{-1}\|_2 \epsilon} \cdot \sqrt{K} M = \frac{\sqrt{K} M \|T^{-1}\|_2^2 \epsilon}{1 - \|T^{-1}\|_2 \epsilon}.
+\end{equation}
+\end{proof}
+
+\subsection{Proposition 2B: Finite-Sample Clean Excess Risk Bound}
+\begin{proposition}
+Assume $\ell$ is $M$-bounded and $L_{\ell, 2}$-Lipschitz with respect to the $\ell_2$ norm. Let $\hat{T}$ be a fixed matrix or computed from an independent split $S_T \perp S_R$ such that $\|\hat{T} - T\|_F \le \epsilon < 1/\|T^{-1}\|_2$. Let $\hat{f} = \arg\min_{f \in \mathcal{F}} \hat{R}_{S_R, \hat{T}}(f)$ on independent sample $S_R$ of size $n_R$. Then with probability at least $1 - \delta$:
+\begin{equation}
+R_{\mathcal{D}}(\hat{f}) - \min_{f \in \mathcal{F}} R_{\mathcal{D}}(f) \le \frac{2 \sqrt{K} M \|T^{-1}\|_2^2 \epsilon}{1 - \|T^{-1}\|_2 \epsilon} + 4 \sqrt{2} L_{\ell, 2} \|\hat{T}^{-1}\|_2 \mathcal{R}_{n_R}(\mathcal{F}) + 2 \sqrt{K} M \|\hat{T}^{-1}\|_2 \sqrt{\frac{\ln(2/\delta)}{2 n_R}}.
+\end{equation}
+\end{proposition}
+\begin{proof}
+Let $f^* = \arg\min_{f \in \mathcal{F}} R_{\mathcal{D}}(f)$. By standard algebraic risk decomposition:
+\begin{align}
+R_{\mathcal{D}}(\hat{f}) - R_{\mathcal{D}}(f^*) &= \left( R_{\mathcal{D}}(\hat{f}) - R_{\tilde{\mathcal{D}}, \hat{T}}(\hat{f}) \right) + \left( R_{\tilde{\mathcal{D}}, \hat{T}}(\hat{f}) - \hat{R}_{S_R, \hat{T}}(\hat{f}) \right) \\
+&\quad + \left( \hat{R}_{S_R, \hat{T}}(\hat{f}) - \hat{R}_{S_R, \hat{T}}(f^*) \right) + \left( \hat{R}_{S_R, \hat{T}}(f^*) - R_{\tilde{\mathcal{D}}, \hat{T}}(f^*) \right) \\
+&\quad + \left( R_{\tilde{\mathcal{D}}, \hat{T}}(f^*) - R_{\mathcal{D}}(f^*) \right).
+\end{align}
+By empirical risk minimisation optimality of $\hat{f}$, $\hat{R}_{S_R, \hat{T}}(\hat{f}) \le \hat{R}_{S_R, \hat{T}}(f^*)$, so the third term is $\le 0$.
+By Proposition 2A, the first and fifth terms satisfy:
+\begin{equation}
+|R_{\mathcal{D}}(\hat{f}) - R_{\tilde{\mathcal{D}}, \hat{T}}(\hat{f})| \le \frac{\sqrt{K} M \|T^{-1}\|_2^2 \epsilon}{1 - \|T^{-1}\|_2 \epsilon}, \quad |R_{\tilde{\mathcal{D}}, \hat{T}}(f^*) - R_{\mathcal{D}}(f^*)| \le \frac{\sqrt{K} M \|T^{-1}\|_2^2 \epsilon}{1 - \|T^{-1}\|_2 \epsilon}.
+\end{equation}
+The remaining terms are bounded by the uniform generalization deviation:
+\begin{equation}
+R_{\mathcal{D}}(\hat{f}) - R_{\mathcal{D}}(f^*) \le \frac{2 \sqrt{K} M \|T^{-1}\|_2^2 \epsilon}{1 - \|T^{-1}\|_2 \epsilon} + 2 \sup_{f \in \mathcal{F}} \left| \hat{R}_{S_R, \hat{T}}(f) - R_{\tilde{\mathcal{D}}, \hat{T}}(f) \right|.
+\end{equation}
+Define the function class $\mathcal{G} = \{g_f(x, \tilde{y}) = [\hat{T}^{-1} \vec{\ell}(f(x))]_{\tilde{y}} : f \in \mathcal{F}\}$. For each sample $(x_i, \tilde{y}_i)$, $|g_f(x_i, \tilde{y}_i)| \le \|\hat{T}^{-1}\|_2 \|\vec{\ell}(f(x_i))\|_2 \le \sqrt{K} M \|\hat{T}^{-1}\|_2$.
+Applying McDiarmid's inequality to the random variable $\Phi(S_R) = \sup_{f \in \mathcal{F}} |\hat{R}_{S_R, \hat{T}}(f) - R_{\tilde{\mathcal{D}}, \hat{T}}(f)|$ with bounded differences $c_i = \frac{2 \sqrt{K} M \|\hat{T}^{-1}\|_2}{n_R}$, with probability at least $1 - \delta$:
+\begin{equation}
+\sup_{f \in \mathcal{F}} \left| \hat{R}_{S_R, \hat{T}}(f) - R_{\tilde{\mathcal{D}}, \hat{T}}(f) \right| \le 2 \mathcal{R}_{n_R}(\mathcal{G}) + \sqrt{K} M \|\hat{T}^{-1}\|_2 \sqrt{\frac{\ln(2/\delta)}{2 n_R}}.
+\end{equation}
+By Maurer's vector-valued Rademacher contraction inequality for vector Lipschitz functions:
+\begin{equation}
+\mathcal{R}_{n_R}(\mathcal{G}) \le \sqrt{2} L_{\ell, 2} \|\hat{T}^{-1}\|_2 \mathcal{R}_{n_R}(\mathcal{F}).
+\end{equation}
+Combining terms gives the stated bound.
+\end{proof}
+
+\section{Full Statistical Test Matrix}
+Table 1 provides the complete inferential comparison across all 24 pairs, documenting both unadjusted $p$-values and family-wise Holm-Bonferroni corrected thresholds.
+
+\begin{table}[h]
+\centering
+\caption{Complete Statistical Significance Matrix: Unadjusted and Holm-Bonferroni Corrected Tests vs CE Baseline across $N=3$ Seeds ($\text{df}=2$).}
+\small
+\begin{tabular}{llcccccc}
+\toprule
+\textbf{Regime} & \textbf{Comparison} & \textbf{Mean $\Delta$ Acc (\%)} & \textbf{$t$-statistic} & \textbf{Exact $p$} & \textbf{Holm $p$} & \textbf{Cohen's $d$} & \textbf{95\% CI} \\
+\midrule
+Clean & GCE vs CE & -1.80 & -22.44 & 0.0020 & 0.0442 & -12.96 & [-2.14, -1.45] \\
+Clean & SCE vs CE & -10.80 & -14.31 & 0.0048 & 0.0885 & -8.26 & [-14.05, -7.55] \\
+Clean & Forward (True $T$) vs CE & -0.18 & -3.93 & 0.0591 & 0.2955 & -2.27 & [-0.38, +0.02] \\
+Clean & Forward (Anchor $T$) vs CE & -0.20 & -5.01 & 0.0375 & 0.2599 & -2.89 & [-0.38, -0.03] \\
+Clean & Forward (ConfLearning $T$) vs CE & -0.63 & -3.78 & 0.0634 & 0.2955 & -2.18 & [-1.35, +0.09] \\
+Clean & Forward (Perturbed $T$) vs CE & -0.91 & -3.77 & 0.0637 & 0.2955 & -2.18 & [-1.95, +0.13] \\
+\midrule
+Sym 20\% & GCE vs CE & +3.15 & +11.81 & 0.0071 & 0.1091 & +6.82 & [+2.00, +4.30] \\
+Sym 20\% & SCE vs CE & -6.84 & -9.67 & 0.0105 & 0.1264 & -5.58 & [-9.89, -3.80] \\
+Sym 20\% & Forward (True $T$) vs CE & +2.35 & +22.60 & 0.0020 & 0.0442 & +13.05 & [+1.91, +2.80] \\
+Sym 20\% & Forward (Anchor $T$) vs CE & +1.59 & +8.62 & 0.0132 & 0.1403 & +4.98 & [+0.80, +2.39] \\
+Sym 20\% & Forward (ConfLearning $T$) vs CE & +2.89 & +10.83 & 0.0084 & 0.1095 & +6.25 & [+1.74, +4.04] \\
+Sym 20\% & Forward (Perturbed $T$) vs CE & +3.62 & +14.60 & 0.0047 & 0.0885 & +8.43 & [+2.55, +4.68] \\
+\midrule
+Sym 50\% & GCE vs CE & +7.95 & +11.39 & 0.0076 & 0.1091 & +6.58 & [+4.95, +10.95] \\
+Sym 50\% & SCE vs CE & -23.42 & -17.69 & 0.0032 & 0.0636 & -10.21 & [-29.12, -17.73] \\
+Sym 50\% & Forward (True $T$) vs CE & +4.72 & +27.89 & 0.0013 & 0.0308 & +16.10 & [+3.99, +5.45] \\
+Sym 50\% & Forward (Anchor $T$) vs CE & +3.88 & +5.04 & 0.0371 & 0.2599 & +2.91 & [+0.57, +7.18] \\
+Sym 50\% & Forward (ConfLearning $T$) vs CE & +5.52 & +8.77 & 0.0128 & 0.1403 & +5.06 & [+2.81, +8.22] \\
+Sym 50\% & Forward (Perturbed $T$) vs CE & +7.55 & +14.18 & 0.0049 & 0.0885 & +8.19 & [+5.26, +9.84] \\
+\midrule
+Asym 40\% & GCE vs CE & -2.88 & -8.67 & 0.0131 & 0.1403 & -5.00 & [-4.31, -1.45] \\
+Asym 40\% & SCE vs CE & -18.47 & -8.77 & 0.0128 & 0.1403 & -5.06 & [-27.54, -9.41] \\
+Asym 40\% & Forward (True $T$) vs CE & +6.19 & +22.77 & 0.0019 & 0.0442 & +13.15 & [+5.02, +7.36] \\
+Asym 40\% & Forward (Anchor $T$) vs CE & +2.01 & +1.35 & 0.3087 & 0.6174 & +0.78 & [-4.38, +8.40] \\
+Asym 40\% & Forward (ConfLearning $T$) vs CE & +0.97 & +0.99 & 0.4263 & 0.6174 & +0.57 & [-3.23, +5.16] \\
+Asym 40\% & Forward (Perturbed $T$) vs CE & +5.42 & +12.05 & 0.0068 & 0.1091 & +6.96 & [+3.48, +7.36] \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\end{document}

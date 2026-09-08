@@ -33,3 +33,15 @@ To establish mathematically sound bounds and algorithms, we explicitly catalog a
 > $$|\ell(\mathbf{p}, y) - \ell(\mathbf{q}, y)| \le L_{\ell} \|\mathbf{p} - \mathbf{q}\|_2, \quad \forall \mathbf{p}, \mathbf{q} \in \Delta^{K-1}$$
 - **Role in Theory**: Enables finite-sample Rademacher complexity generalization bounds and excess risk concentration via McDiarmid's inequality.
 - **Realism Audit**: Standard for bounded losses (GCE, SCE, MAE); for Cross-Entropy, bounded by clipping softmax predictions $\epsilon \le f_k(x) \le 1-\epsilon$.
+
+---
+
+## Assumption 5: Independent Estimator / Sample Splitting ($S_T \perp S_R$)
+> **Statement**: The transition matrix estimator $\hat{T}$ is measurable with respect to an independent sample partition $S_T = \{(x_i^T, \tilde{y}_i^T)\}_{i=1}^{n_T} \overset{\text{i.i.d.}}{\sim} \tilde{\mathcal{D}}$, which is statistically independent of the training sample $S_R = \{(x_i^R, \tilde{y}_i^R)\}_{i=1}^{n_R} \overset{\text{i.i.d.}}{\sim} \tilde{\mathcal{D}}$ used for empirical risk minimization:
+> $$S_T \cap S_R = \emptyset, \quad S_T \perp S_R$$
+- **Role in Theory**: Strictly required for McDiarmid concentration and uniform Rademacher complexity bounds in Proposition 2B. Decouples the operator perturbation $\hat{T} - T$ from the empirical risk sum over $S_R$.
+- **Realism Audit & Heuristic Status**:
+  - `Forward (True T)` and `Forward (Perturbed T)` trivially satisfy this assumption as fixed/oracle deterministic operators.
+  - Practical data-driven implementations often reuse the training set: standard Confident Learning (Northcutt et al., 2021) and Anchor Point estimation (Patrini et al., 2017) perform out-of-fold or warm-up estimation on the *same* sample ($S_T = S_R$).
+  - Therefore, same-sample Confident Learning and Anchor Point estimation are classified as **empirical heuristics outside the strict coverage of Proposition 2B**. A controlled sample-split condition ($S_T \perp S_R$) is required for direct theoretical adherence.
+

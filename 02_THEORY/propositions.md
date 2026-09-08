@@ -76,13 +76,36 @@ The uniform concentration in Proposition 2B strictly requires $0 \le \ell \le M$
 
 ---
 
-### Remark on Same-Sample Data-Dependent Estimation $\hat{T}(S)$
+### Remark on Same-Sample Data-Dependent Estimation $\hat{T}(S)$ & Heuristic Classification
 When $\hat{T} = \hat{T}(S)$ is estimated from the **exact same noisy sample** $S$ used for empirical risk minimization without sample splitting:
-1. Standard single-function McDiarmid concentration and Rademacher symmetrization do not apply directly because the loss function $g_f(z) = [\hat{T}(S)^{-1} \vec{\ell}(f(x))]_{\tilde{y}}$ is coupled to all instances in $S$.
-2. To bound this same-sample case rigorously, one must take a uniform supremum over the compact perturbation ball $\mathcal{T}_\epsilon = \{ A \in \mathbb{R}^{K \times K} : \|A - T\|_F \le \epsilon \}$, adding a metric-entropy / covering net term $O\left(\frac{K^2 \ln(n)}{n}\right)$, or establish uniform algorithmic stability of $\hat{T}(S)$.
-3. Therefore, Proposition 2B is formally stated under the standard sample-splitting / conditional independence model.
+1. Standard single-function McDiarmid concentration and Rademacher symmetrization do not apply directly because the loss function $g_f(z) = [\hat{T}(S)^{-1} \vec{\ell}(f(x))]_{\tilde{y}}$ is coupled to all instances in $S$. Changing a single instance $(x_i, \tilde{y}_i)$ perturbs $\hat{T}(S)$, shifting all $n$ loss terms in the empirical risk summation.
+2. To bound this same-sample case rigorously, one must either:
+   - take a uniform supremum over the compact perturbation ball $\mathcal{B}_\epsilon(T) = \{ A \in \mathbb{R}^{K \times K} : \|A - T\|_F \le \epsilon, A\mathbf{1}=\mathbf{1} \}$, introducing a metric-entropy / covering net complexity term $\mathcal{O}\left(\sqrt{\frac{K^2 \ln(n)}{n}}\right)$, or
+   - establish uniform algorithmic stability of the transition estimator $\beta \le \mathcal{O}(1/n)$.
+3. **Formal Classification of Pilot Tracks**:
+   - `Forward (True T)` and `Forward (Perturbed T)` are fixed/oracle deterministic operators that strictly satisfy $S_T \perp S_R$ and are **fully covered** by Proposition 2B.
+   - `Forward (Anchor T)` and `Forward (ConfLearning T)` as executed in standard practice reuse the training set ($S_T = S_R$) and are classified as **empirical heuristics outside the strict coverage of Proposition 2B**.
+   - A dedicated sample-split condition ($S_T \cap S_R = \emptyset$, $S_T \perp S_R$) is required to achieve direct empirical alignment with Proposition 2B for data-driven transition estimation.
 
 ---
+
+### Analysis of Finite-Sample Generalization vs. Population Unbiasedness: The True-$T$ Oracle vs. Robust Losses (GCE)
+An apparent paradox in empirical benchmarks is that under Symmetric 50% noise, bounded robust losses (GCE) outperform the unbiased True-$T$ Forward Correction oracle ($82.40\%$ vs $79.17\%$). This outcome does not contradict Proposition 1 or Proposition 2B, but illustrates fundamental principles of statistical learning and deep network optimization:
+
+1. **Population Unbiasedness vs. Finite-Sample Risk Minimization**:
+   - Proposition 1 proves *population-level* unbiasedness ($\mathbb{E}_{\tilde{\mathcal{D}}}[\tilde{\ell}] = R_{\mathcal{D}}(f)$). Population unbiasedness guarantees consistency as $n \to \infty$ under exact global empirical risk minimization.
+   - It does *not* imply that on a finite sample of size $n$ optimized via stochastic gradient descent (SGD), the unbiased estimator minimizes clean test error. In non-convex optimization with overparameterized models, the bias-variance tradeoff of the gradient estimator strongly governs generalization.
+2. **Gradient Variance and Truncation**:
+   - In Forward Correction ($-\log([T^\top f(x)]_{\tilde{y}})$), under 50% noise, half of the training examples have incorrect labels. The loss remains steep at low probabilities, so every corrupted sample exerts a persistent gradient pull on parameters.
+   - In GCE ($\ell_q(p, y) = \frac{1 - p_y^q}{q}$, $q=0.7$), the gradient magnitude is $|\nabla_z \ell_q| \propto p_y^q (1 - p_y)$. As the network rapidly learns simple clean patterns in early epochs, corrupted labels receive low clean model probability ($p_{\tilde{y}} \to 0$). The factor $p_{\tilde{y}}^{0.7}$ dynamically attenuates the gradient of corrupted instances toward zero, acting as an implicit continuous noise trimmer and reducing stochastic gradient variance on the clean data manifold.
+3. **Invariance of the Bayes Boundary under Symmetric Noise**:
+   - Under symmetric noise and balanced priors, the corrupted posterior satisfies $\arg\max_k [T^\top \mathbf{p}(x)]_k = \arg\max_k \mathbf{p}(x)$. The Bayes decision boundary is invariant to symmetric noise. Consequently, directional matrix inversion is unnecessary; variance reduction (achieved by GCE) dominates.
+   - Under asymmetric noise (e.g., 40% pair-flip), the Bayes decision boundary is severely displaced. GCE cannot distinguish systematic corruption from minority clean instances and memorizes the shifted boundary ($78.73\%$, $-2.88\%$ vs CE). In contrast, True $T$ correctly inverts the directional boundary shift ($87.80\%$, $+6.19\%$ vs CE).
+4. **Regularization Evidence via Perturbed $T$**:
+   - `Forward (Perturbed T)` ($T_{\text{perturbed}} = 0.5 T + 0.5 U$) achieves $82.00\%$ on Symmetric 50%, matching GCE and surpassing unregularized True $T$ ($79.17\%$). Mixing with the uniform matrix $U$ injects label smoothing, regularizing gradient variance and demonstrating that regularization outperforms exact unbiasedness on symmetric noise.
+
+---
+
 
 ## Proposition 3 (Noise Tolerance Barrier of Convex Multi-Class Losses)
 Let $K \ge 3$. There does not exist any strictly convex, classification-calibrated surrogate loss function $\ell: \Delta^{K-1} \times \{1, \dots, K\} \to \mathbb{R}_+$ that is symmetric in the sense of $\sum_{k=1}^K \ell(\mathbf{p}, k) = C$ for all $\mathbf{p} \in \Delta^{K-1}$. (Charoenphakdee et al., ICML 2019).

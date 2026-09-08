@@ -52,7 +52,10 @@ def load_cifar10n_noise(
 
     if cifar10n_path.endswith(".pt"):
         import torch
-        data = torch.load(cifar10n_path, map_location="cpu")
+        try:
+            data = torch.load(cifar10n_path, map_location="cpu", weights_only=False)
+        except TypeError:
+            data = torch.load(cifar10n_path, map_location="cpu")
     else:
         data = np.load(cifar10n_path, allow_pickle=True).item()
 
@@ -63,3 +66,30 @@ def load_cifar10n_noise(
     actual_noise_rate = float(np.mean(actual_noise_mask))
 
     return noisy_labels, clean_labels, actual_noise_rate
+
+
+def compute_empirical_transition_matrix(
+    clean_labels: np.ndarray,
+    noisy_labels: np.ndarray,
+    num_classes: int = 10,
+) -> np.ndarray:
+    """Compute the empirical class-conditional confusion/transition matrix T.
+    
+    T[i, j] = P(\\tilde{Y} = j | Y = i) = Count(Y=i, \\tilde{Y}=j) / Count(Y=i).
+    Each row sums to 1.
+    """
+    clean_labels = np.asarray(clean_labels, dtype=np.int64)
+    noisy_labels = np.asarray(noisy_labels, dtype=np.int64)
+    T = np.zeros((num_classes, num_classes), dtype=np.float64)
+
+    for i in range(num_classes):
+        mask_i = (clean_labels == i)
+        count_i = np.sum(mask_i)
+        if count_i > 0:
+            for j in range(num_classes):
+                T[i, j] = np.sum((clean_labels == i) & (noisy_labels == j)) / count_i
+        else:
+            T[i, i] = 1.0
+
+    return T
+

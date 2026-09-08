@@ -56,10 +56,40 @@ def ensure_cifar10_ready():
     return False
 
 
+def ensure_cifar10n_ready():
+    """Ensure CIFAR-10_human.pt is downloaded and available."""
+    target_file = os.path.join(DATA_DIR, "CIFAR-10_human.pt")
+    if os.path.exists(target_file) and os.path.getsize(target_file) > 1000000:
+        print("CIFAR-10N human annotations already downloaded and ready.")
+        return True
+
+    url = "https://raw.githubusercontent.com/UCSC-REAL/cifar-10-100n/main/data/CIFAR-10_human.pt"
+    print(f"Downloading CIFAR-10N human annotations from {url}...")
+    for attempt in range(5):
+        try:
+            req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+            with urllib.request.urlopen(req, timeout=120) as response, open(target_file, "wb") as out_file:
+                while True:
+                    buf = response.read(1024 * 1024)
+                    if not buf:
+                        break
+                    out_file.write(buf)
+            if os.path.exists(target_file) and os.path.getsize(target_file) > 1000000:
+                print("CIFAR-10N human annotations downloaded successfully.")
+                return True
+        except Exception as e:
+            print(f"CIFAR-10N download attempt {attempt+1} failed: {e}. Retrying in 2s...")
+            time.sleep(2.0)
+
+    return False
+
+
 def main():
-    success = ensure_cifar10_ready()
-    return 0 if success else 1
+    cifar10_ok = ensure_cifar10_ready()
+    cifar10n_ok = ensure_cifar10n_ready()
+    return 0 if (cifar10_ok and cifar10n_ok) else 1
 
 
 if __name__ == "__main__":
     sys.exit(main())
+
