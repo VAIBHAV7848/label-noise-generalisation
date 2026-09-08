@@ -298,17 +298,33 @@ def run_single_experiment(
         T_hat = true_T.copy()
         frobenius_error = 0.0
 
-        if track_name == "CE":
+        track_key = track_name.strip()
+        track_map = {
+            "ce": "CE",
+            "gce": "GCE",
+            "sce": "SCE",
+            "forwardcorrection_truet": "ForwardCorrection_TrueT",
+            "forward_truet": "ForwardCorrection_TrueT",
+            "forwardcorrection_anchort": "ForwardCorrection_AnchorT",
+            "forward_anchort": "ForwardCorrection_AnchorT",
+            "forwardcorrection_confidentlearningt": "ForwardCorrection_ConfidentLearningT",
+            "forward_confidentlearningt": "ForwardCorrection_ConfidentLearningT",
+            "forwardcorrection_badt": "ForwardCorrection_BadT",
+            "forward_badt": "ForwardCorrection_BadT",
+        }
+        canonical_track = track_map.get(track_key.lower().replace("-", "_"), track_key)
+
+        if canonical_track == "CE":
             criterion = nn.CrossEntropyLoss()
-        elif track_name == "GCE":
+        elif canonical_track == "GCE":
             criterion = GeneralizedCrossEntropyLoss(q=0.7)
-        elif track_name == "SCE":
+        elif canonical_track == "SCE":
             criterion = SymmetricCrossEntropyLoss(alpha=0.1, beta=1.0)
-        elif track_name == "ForwardCorrection_TrueT":
+        elif canonical_track == "ForwardCorrection_TrueT":
             T_hat = true_T.copy()
             criterion = ForwardLossCorrection(transition_matrix=T_hat)
             frobenius_error = 0.0
-        elif track_name == "ForwardCorrection_AnchorT":
+        elif canonical_track == "ForwardCorrection_AnchorT":
             # Estimate T via anchor points using a quick 5-epoch warm-up model
             warmup_model = PreActResNet18(num_classes=10).to(device) if model_name == "PreActResNet18" else TwoLayerMLP(3072, 512, 10).to(device)
             warmup_opt = torch.optim.SGD(warmup_model.parameters(), lr=0.05, momentum=0.9, weight_decay=5e-4)
@@ -328,7 +344,7 @@ def run_single_experiment(
             T_hat = estimate_transition_matrix_anchor_points(all_train_probs, train_noisy_labels, 10, percentile=97.0, global_search=True)
             frobenius_error = float(np.linalg.norm(T_hat - true_T, ord="fro"))
             criterion = ForwardLossCorrection(transition_matrix=T_hat)
-        elif track_name == "ForwardCorrection_ConfidentLearningT":
+        elif canonical_track == "ForwardCorrection_ConfidentLearningT":
             # Estimate T via Confident Learning using true out-of-fold (OOF) cross-validation (Northcutt et al., 2021)
             model_factory = (lambda: PreActResNet18(num_classes=10)) if model_name == "PreActResNet18" else (lambda: TwoLayerMLP(3072, 512, 10))
             raw_train_data = train_loader.dataset.data
@@ -347,7 +363,7 @@ def run_single_experiment(
             T_hat, _ = estimate_transition_matrix_confident_learning(oof_train_probs, train_noisy_labels, 10)
             frobenius_error = float(np.linalg.norm(T_hat - true_T, ord="fro"))
             criterion = ForwardLossCorrection(transition_matrix=T_hat)
-        elif track_name == "ForwardCorrection_BadT":
+        elif canonical_track == "ForwardCorrection_BadT":
             # Deliberately perturbed matrix T_bad = 0.5 T + 0.5 Uniform
             U = np.ones((10, 10), dtype=np.float64) / 10.0
             T_hat = 0.5 * true_T + 0.5 * U
@@ -442,7 +458,7 @@ def run_single_experiment(
                 "dataset": "cifar10",
                 "noise_regime": noise_regime,
                 "model": model_name,
-                "track": track_name,
+                "track": canonical_track,
                 "seed": seed,
                 "epochs": epochs,
                 "batch_size": batch_size,
